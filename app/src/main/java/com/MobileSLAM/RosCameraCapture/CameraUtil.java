@@ -83,6 +83,8 @@ public class CameraUtil {
         return res;
     }
 
+    static public native short[] parseDepth16_native(ShortBuffer shortBuffer, int width, int height, float confidenceThreshold);
+
     public static short[] undistortion(short[] input, CameraParam camParam) {
 
         float fx = camParam._fx;
@@ -126,6 +128,7 @@ public class CameraUtil {
 
     }
 
+    public static native void undistortion();
 
     public static int[] undistortion(int[] input, CameraParam camParam) {
 
@@ -223,6 +226,32 @@ public class CameraUtil {
         }
         return res;
     }
+
+
+
+    public static byte[] convertShortToGray(short[] depth, CameraParam depthParam, short maxDepthThreshold){
+
+        byte[] output = new byte[depthParam.frameWidth * depthParam.frameHeight];
+
+        short max_measurement = 0;
+        for(int index=0; index<depth.length; index++){
+            short rawDepth = depth[index];
+            if(rawDepth > maxDepthThreshold) rawDepth = 0;
+            if(rawDepth > max_measurement) max_measurement = rawDepth;
+            if(rawDepth == 0){
+                output[index] = (byte) 0;
+            }else{
+                int normalized = rawDepth * 255 / maxDepthThreshold;
+                output[index] = (byte) normalized;
+            }
+        }
+
+        return output;
+    }
+
+
+    public static native int[] convertYUV2ARGB(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
+
 
     static public class CameraParam{
 

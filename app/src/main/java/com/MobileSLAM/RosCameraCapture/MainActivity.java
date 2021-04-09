@@ -17,6 +17,10 @@ import java.net.URI;
 
 public class MainActivity extends RosActivity {
 
+    static {
+        System.loadLibrary("camera-util");
+    }
+
     public MainActivity() {
         super("ros_test", "ros_test", URI.create("http://192.168.1.100:11311"));
     }

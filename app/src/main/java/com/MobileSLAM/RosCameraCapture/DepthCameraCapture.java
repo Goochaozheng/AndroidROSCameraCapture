@@ -3,12 +3,15 @@ package com.MobileSLAM.RosCameraCapture;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.media.Image;
 import android.media.ImageReader;
@@ -19,6 +22,7 @@ import android.util.Log;
 import android.view.TextureView;
 
 import java.nio.ShortBuffer;
+import java.util.Arrays;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 public class DepthCameraCapture {
@@ -35,16 +39,22 @@ public class DepthCameraCapture {
     private CaptureRequest mCaptureRequest;
     private CaptureRequest.Builder mCaptureRequestBuilder;
 
-    public float depthConfidenceThreshold = 0.1f;
+    private Object frameLock = new Object();
+    public boolean hasNext = false;
+    public short[] latestFrame;
 
-    public CameraUtil.CameraParam mCameraParam = CameraUtil.depthCameraParam;
+    public float depthConfidenceThreshold = 0.1f;
+    public short maxDepthThreshold = 5000;            // Max Depth, in millimeter
+
+    public CameraUtil.CameraParam mCameraParam;
 
 
     public DepthCameraCapture(Context context, @NonNull TextureView textureView) {
         mMainActivity = (Activity) context;
         mCameraManager = (CameraManager) mMainActivity.getSystemService(Context.CAMERA_SERVICE);
-        mCameraId = "0";            // Fixed camera id used for samsung s20+
+        mCameraId = "4";            // Fixed camera id used for samsung s20+
         mTextureView = textureView;
+        mCameraParam = CameraUtil.depthCameraParam;
     }
 
 
@@ -52,15 +62,6 @@ public class DepthCameraCapture {
     public boolean startCameraPreview() {
         try {
             mCameraManager.openCamera(mCameraId, depthCameraStateCallback, null);
-            // Set camera parameters
-//            CameraCharacteristics camChara = mCameraManager.getCameraCharacteristics(mCameraId);
-//            mCameraParam.setFrameSize(320, 240);
-//            mCameraParam.setInrinsics(camChara.get(CameraCharacteristics.LENS_INTRINSIC_CALIBRATION));
-//            mCameraParam.setExtrinsic(
-//                    camChara.get(CameraCharacteristics.LENS_POSE_TRANSLATION),
-//                    camChara.get(CameraCharacteristics.LENS_POSE_ROTATION)
-//            );
-//            mCameraParam.setDistortionParam(camChara.get(CameraCharacteristics.LENS_RADIAL_DISTORTION));
         }catch (CameraAccessException e){
             e.printStackTrace();
             return false;
@@ -68,19 +69,46 @@ public class DepthCameraCapture {
         return true;
     }
 
+
+    // TODO get latest frame and send as message by ROS
+    public short[] getLatestFrame() throws InterruptedException {
+        short[] copyData;
+        synchronized (frameLock){
+            if(!hasNext){
+                frameLock.wait();
+            }
+            copyData = Arrays.copyOf(latestFrame, latestFrame.length);
+            hasNext = false;
+        }
+        return copyData;
+    }
+
+
+    // Handle callback when camera state changes
     private CameraDevice.StateCallback depthCameraStateCallback = new CameraDevice.StateCallback() {
         @Override
         public void onOpened(@NonNull CameraDevice cameraDevice) {
+            // start capture session as camera opened
             Log.i(TAG, "Camera " + cameraDevice.getId() + " Opened");
 
             mCameraDevice = cameraDevice;
 
+            // Configure surface texture for preview
             SurfaceTexture texture = mTextureView.getSurfaceTexture();
             assert texture != null;
             texture.setDefaultBufferSize(mCameraParam.frameWidth, mCameraParam.frameHeight);
 
+            // Configure image reader for image messaging
             mImageReader = ImageReader.newInstance(mCameraParam.frameWidth, mCameraParam.frameHeight, ImageFormat.DEPTH16, 2);
             mImageReader.setOnImageAvailableListener(depthImageAvailableListener, null);
+
+            try{
+                mCaptureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+                mCaptureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+                cameraDevice.createCaptureSession(Arrays.asList(mImageReader.getSurface()), depthCameraCaptureSessionStateCallback, null);
+            } catch (CameraAccessException e){
+                e.printStackTrace();
+            }
 
         }
 
@@ -97,6 +125,8 @@ public class DepthCameraCapture {
         }
     };
 
+
+    // handle callback when image reader state changes
     private ImageReader.OnImageAvailableListener depthImageAvailableListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader imageReader) {
@@ -107,9 +137,42 @@ public class DepthCameraCapture {
             short[] depthShort = CameraUtil.parseDepth16(depthShortBuffer, mCameraParam.frameWidth, mCameraParam.frameHeight, depthConfidenceThreshold);
             depthShort = CameraUtil.undistortion(depthShort, mCameraParam);
             depthShort = CameraUtil.depthRectify(depthShort, mCameraParam, CameraUtil.colorCameraParam);
+
+//            byte[] depthGray = CameraUtil.convertShortToGray(depthShort, mCameraParam, maxDepthThreshold);
+//            Bitmap grayBitmap = Bitmap.createBitmap(mCameraParam.frameWidth, mCameraParam.frameHeight, Bitmap.Config.ARGB_8888);
+
+            synchronized (frameLock){
+                latestFrame = depthShort;
+                hasNext = true;
+                frameLock.notifyAll();
+            }
+
+            img.close();
+        }
+    };
+
+    // handle callback when capture session state changes
+    private CameraCaptureSession.StateCallback depthCameraCaptureSessionStateCallback = new CameraCaptureSession.StateCallback() {
+        @Override
+        public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
+            try{
+                CaptureRequest captureRequest = mCaptureRequestBuilder.build();
+                cameraCaptureSession.setRepeatingRequest(captureRequest, null, null);
+            } catch (CameraAccessException e){
+                e.printStackTrace();
+            }
         }
 
+        @Override
+        public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
+            Log.e(TAG, "Capture Session Configure Failed");
+        }
     };
+
+    private boolean RosInit(){
+        // TODO Implement ROS initialization, create new ros node ?
+        return true;
+    }
 
 
 }

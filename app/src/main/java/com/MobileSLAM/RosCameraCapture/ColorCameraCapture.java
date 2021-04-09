@@ -3,15 +3,15 @@ package com.MobileSLAM.RosCameraCapture;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
-import android.graphics.Camera;
+import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
-import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.media.Image;
 import android.media.ImageReader;
 import android.os.Build;
 import android.support.annotation.NonNull;
@@ -33,52 +33,31 @@ public class ColorCameraCapture {
 
     private String mCameraId;
     private CameraManager mCameraManager;
-    private CameraDevice mCameraDevice;
-    private CaptureRequest mCaptureRequest;
     private CaptureRequest.Builder mCaptureRequestBuilder;
 
-    public static final float SCALE_FACTOR = 1.0f;
+    private Object frameLock = new Object();
+    public boolean hasNext = false;
+    public short[] latestFrame;
 
     public int frameWidth;
     public int frameHeight;
 
     public CameraUtil.CameraParam mCameraParam;
-//    public CameraUtil.CameraParam mCameraParam = new CameraUtil.CameraParam(
-//            3054.3071f * SCALE_FACTOR,
-//            3052.0754f * SCALE_FACTOR,
-//            1990.2135f * SCALE_FACTOR,
-//            1512.378f * SCALE_FACTOR,
-//            0f,
-//            0f,
-//            0f,
-//            0f,
-//            0.05797f,
-//            -0.05520f,
-//            0.00144f,
-//            0,
-//            0
-//    );
+
 
     public ColorCameraCapture(Context context, @NonNull TextureView textureView) {
         mMainActivity = (Activity) context;
         mCameraManager = (CameraManager) mMainActivity.getSystemService(Context.CAMERA_SERVICE);
         mCameraId = "0";            // Fixed camera id used for samsung s20+
         mTextureView = textureView;
+        mCameraParam = CameraUtil.colorCameraParam;
     }
 
 
     @SuppressLint("MissingPermission")
     public boolean StartCameraPreview(){
         try {
-            mCameraManager.openCamera(mCameraId, mColorCameraStateCallback, null);
-            // Set camera parameters
-            CameraCharacteristics camChara = mCameraManager.getCameraCharacteristics(mCameraId);
-            mCameraParam.setInrinsics(camChara.get(CameraCharacteristics.LENS_INTRINSIC_CALIBRATION));
-            mCameraParam.setExtrinsic(
-                    camChara.get(CameraCharacteristics.LENS_POSE_TRANSLATION),
-                    camChara.get(CameraCharacteristics.LENS_POSE_ROTATION)
-            );
-            mCameraParam.setDistortionParam(camChara.get(CameraCharacteristics.LENS_RADIAL_DISTORTION));
+            mCameraManager.openCamera(mCameraId, colorCameraStateCallback, null);
         }catch (CameraAccessException e){
             e.printStackTrace();
             return false;
@@ -88,27 +67,31 @@ public class ColorCameraCapture {
 
 
     // Callback for camera device state change
-    private CameraDevice.StateCallback mColorCameraStateCallback = new CameraDevice.StateCallback(){
+    private CameraDevice.StateCallback colorCameraStateCallback = new CameraDevice.StateCallback(){
 
         @Override
         public void onOpened(@NonNull CameraDevice cameraDevice) {
             Log.i(TAG, "Camera " + cameraDevice.getId() + " Opened");
 
-            mCameraDevice = cameraDevice;
-
-            // Bind surface texture for preview
+            // Configure surface texture for preview
             SurfaceTexture texture = mTextureView.getSurfaceTexture();
             assert texture != null;
-
             texture.setDefaultBufferSize(frameWidth, frameHeight);
             Surface previewSurface = new Surface(texture);
+
+            // Configure image reader for image messaging
+            mImageReader = ImageReader.newInstance(mCameraParam.frameWidth, mCameraParam.frameHeight, ImageFormat.YUV_420_888, 2);
+            mImageReader.setOnImageAvailableListener(colorImageAvailableListener, null);
+
+            // Configure capture request
             try{
                 mCaptureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                 mCaptureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-                mCaptureRequestBuilder.addTarget(previewSurface);        // target for preview
+                mCaptureRequestBuilder.addTarget(previewSurface);
+                mCaptureRequestBuilder.addTarget(mImageReader.getSurface());
 
                 // create capture session
-                cameraDevice.createCaptureSession(Arrays.asList(previewSurface), mColorCameraCaptureSessionStateCallbakc, null);
+                cameraDevice.createCaptureSession(Arrays.asList(previewSurface), colorCameraCaptureSessionStateCallbakc, null);
 
             } catch (CameraAccessException e){
                 e.printStackTrace();
@@ -129,8 +112,37 @@ public class ColorCameraCapture {
     };
 
 
+    private ImageReader.OnImageAvailableListener colorImageAvailableListener = new ImageReader.OnImageAvailableListener() {
+        @Override
+        public void onImageAvailable(ImageReader imageReader) {
+            Image img = imageReader.acquireLatestImage();
+            if(img != null){
+                Image.Plane[] planes = img.getPlanes();
+                byte[][] yuvBytes = new byte[planes.length][];
+                for(int i = 0; i < planes.length; i++){
+                    yuvBytes[i] = new byte[planes[i].getBuffer().capacity()];
+                    planes[i].getBuffer().get(yuvBytes[i]);
+                }
+
+                final int yRowStride = planes[0].getRowStride();
+                final int uvRowStride = planes[1].getRowStride();
+                final int uvPixelStride = planes[1].getPixelStride();
+
+                int[] argbUint32 = new int[mCameraParam.frameWidth * mCameraParam.frameHeight];
+//                CameraUtil.convertYUV2ARGB(yuvBytes[0], yuvBytes[1], yuvBytes[2],
+//                                            yRowStride, uvRowStride, uvPixelStride,
+//                                            mCameraParam.frameWidth, mCameraParam.frameHeight,
+//                                            argbUint32);
+
+
+
+            }
+        }
+    };
+
+
     // Callback for capture session state change
-    private CameraCaptureSession.StateCallback mColorCameraCaptureSessionStateCallbakc = new CameraCaptureSession.StateCallback() {
+    private CameraCaptureSession.StateCallback colorCameraCaptureSessionStateCallbakc = new CameraCaptureSession.StateCallback() {
         @Override
         public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
             try{
@@ -147,11 +159,6 @@ public class ColorCameraCapture {
         }
     };
 
-    private int[] ConvertYUV2ARGB(){
-        // TODO Implement conversion
-        int[] res = new int[frameWidth*frameHeight];
-        return res;
-    }
 
     private boolean RosInit(){
         // TODO Implement ROS initialization, create new ros node ?
