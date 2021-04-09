@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">ROS Camera Capture</string>
+    <string name="depth_camera">Depth Camera</string>
+    <string name="color_camera">Color Camera</string>
+    <string name="start_btn">Start</string>
+</resources>
