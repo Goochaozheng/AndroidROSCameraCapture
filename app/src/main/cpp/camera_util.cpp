@@ -9,18 +9,11 @@ typedef unsigned int uint32;
 
 
 
-extern "C"
-JNIEXPORT jshortArray JNICALL
-Java_com_MobileSLAM_RosCameraCapture_CameraUtil_parseDepth16_1native(JNIEnv *env, jclass clazz,
-                                                                     jobject short_buffer,
-                                                                     jint width, jint height,
-                                                                     jfloat confidence_threshold) {
-    // TODO: implement parseDepth16_native()
-}
+
 
 extern "C"
 JNIEXPORT jintArray JNICALL
-Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUV2ARGB(JNIEnv *env, jclass clazz,
+Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUVToARGB(JNIEnv *env, jclass clazz,
                                                                 jbyteArray y_data,
                                                                 jbyteArray u_data,
                                                                 jbyteArray v_data,
@@ -37,7 +30,8 @@ Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUV2ARGB(JNIEnv *env, jcl
     jbyte* const v_buff = env->GetByteArrayElements(v_data, &inputCopy);
     uint8* const vData = reinterpret_cast<uint8*>(v_buff);
 
-    uint32* outData;
+    jintArray returnedArray = env->NewIntArray(width*height);
+    jint *outData = env->GetIntArrayElements(returnedArray, NULL);
 
     static const int kMaxChannelValue = 262143;
 
@@ -82,7 +76,7 @@ Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUV2ARGB(JNIEnv *env, jcl
     env->ReleaseByteArrayElements(u_data, u_buff, JNI_ABORT);
     env->ReleaseByteArrayElements(v_data, v_buff, JNI_ABORT);
     env->ReleaseByteArrayElements(y_data, y_buff, JNI_ABORT);
+    env->ReleaseIntArrayElements(returnedArray, outData, JNI_ABORT);
 
-    // cast uint32 to jintArray
-    
+    return returnedArray;
 }

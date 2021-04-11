@@ -1,6 +1,9 @@
 package com.MobileSLAM.RosCameraCapture;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.util.Log;
+import android.view.TextureView;
 
 import java.nio.ShortBuffer;
 
@@ -12,6 +15,7 @@ public class CameraUtil {
             // frame size
             320,
             240,
+            0.5f,
             // intrinsics
             536.9581f,
             536.7106f,
@@ -19,8 +23,8 @@ public class CameraUtil {
             233.22255f,
             0f,
             // extrinsics
+            -0.011234f,
             0f,
-            0.01124f,
             0f,
             0.70304f,
             -0.71113f,
@@ -38,6 +42,7 @@ public class CameraUtil {
             // frame size
             320,
             240,
+            0.07936f,
             // intrinsics
             3054.3071f,
             3052.0754f,
@@ -83,7 +88,7 @@ public class CameraUtil {
         return res;
     }
 
-    static public native short[] parseDepth16_native(ShortBuffer shortBuffer, int width, int height, float confidenceThreshold);
+//    static public native short[] parseDepth16_native(ShortBuffer shortBuffer, int width, int height, float confidenceThreshold);
 
     public static short[] undistortion(short[] input, CameraParam camParam) {
 
@@ -100,7 +105,7 @@ public class CameraUtil {
         int width = camParam.frameWidth;
         int height = camParam.frameHeight;
 
-        short[] output = new short[width*height];
+        short[] output = new short[input.length];
 
         for(int v = 0; v < height; v++){
             for(int u = 0; u < width; u++){
@@ -128,7 +133,7 @@ public class CameraUtil {
 
     }
 
-    public static native void undistortion();
+//    public static native void undistortion();
 
     public static int[] undistortion(int[] input, CameraParam camParam) {
 
@@ -205,9 +210,9 @@ public class CameraUtil {
                 float depth_y = (v - depthParam._cy) / depthParam._fy * depth_z;
 
                 // transform 3d point to sensor coordinate
-                float color_x = depth_x*(1-2*qy*qy-2*qz*qz) + depth_y*(2*qx*qy+2*qz*qw) + depth_z*(2*qx*qz-2*qy*qw) - tx;
-                float color_y = depth_x*(2*qx*qy-2*qz*qw) + depth_y*(1-2*qx*qx-2*qz*qz) + depth_z*(2*qy*qz+2*qx*qw) - ty;
-                float color_z = depth_x*(2*qx*qz+2*qy*qw) + depth_y*(2*qy*qz-2*qx*qw) + depth_z*(1-2*qx*qx-2*qy*qy) - tz;
+                float color_x = depth_x*(1-2*qy*qy-2*qz*qz) + depth_y*(2*qx*qy+2*qz*qw) + depth_z*(2*qx*qz-2*qy*qw) + tx;
+                float color_y = depth_x*(2*qx*qy-2*qz*qw) + depth_y*(1-2*qx*qx-2*qz*qz) + depth_z*(2*qy*qz+2*qx*qw) + ty;
+                float color_z = depth_x*(2*qx*qz+2*qy*qw) + depth_y*(2*qy*qz-2*qx*qw) + depth_z*(1-2*qx*qx-2*qy*qy) + tz;
 
                 // transform from sensor coordinate to color camera coordinate
                 float color_x_2 = color_x*(1-2*qy_2*qy_2-2*qz_2*qz_2) + color_y*(2*qx_2*qy_2+2*qz_2*qw_2) + color_z*(2*qx_2*qz_2-2*qy_2*qw_2);
@@ -228,10 +233,9 @@ public class CameraUtil {
     }
 
 
+    public static byte[] convertShortToGray(short[] depth, short maxDepthThreshold){
 
-    public static byte[] convertShortToGray(short[] depth, CameraParam depthParam, short maxDepthThreshold){
-
-        byte[] output = new byte[depthParam.frameWidth * depthParam.frameHeight];
+        byte[] output = new byte[depth.length];
 
         short max_measurement = 0;
         for(int index=0; index<depth.length; index++){
@@ -249,13 +253,53 @@ public class CameraUtil {
         return output;
     }
 
+    public static int[] convertShortToARGB(short[] shortDepthValues, short maxDepthThreshold) {
 
-    public static native int[] convertYUV2ARGB(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
+        int[] output = new int[shortDepthValues.length];
+        assert shortDepthValues.length == output.length;
 
+        for(int index=0; index<shortDepthValues.length; index++){
+            short rawDepth = shortDepthValues[index];
+            if(rawDepth > maxDepthThreshold) rawDepth = 0;
+            int normalized = rawDepth * 255 / maxDepthThreshold;
+
+            int nR = 255 - normalized;
+            int nG = 255 - normalized;
+            int nB = 255 - normalized;
+
+            if(rawDepth != 0){
+                output[index] = 0xff000000 | (nR << 16) | (nG << 8) | nB;
+            }else{
+                output[index] = 0xff000000 | (0 << 16) | (0 << 8) | 0;
+            }
+        }
+
+        return output;
+    }
+
+    public static int[] convertGrayToARGB(byte[] gray){
+        int[] res = new int[gray.length];
+        for(int i = 0; i < gray.length; i++){
+            int grayValue = gray[i];
+            res[i] = 0xFF000000 | (grayValue << 16) | (grayValue << 8) | grayValue;
+        }
+        return res;
+    }
+
+
+    public static native int[] convertYUVToARGB(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
+
+
+    public static void renderBitmapToTextureview(Bitmap bitmap, TextureView view){
+        Canvas canvas = view.lockCanvas();
+        assert canvas != null;
+        canvas.drawBitmap(bitmap, 0, 0, null);
+        view.unlockCanvasAndPost(canvas);
+    }
 
     static public class CameraParam{
 
-        public float _scaleFactor = 1.0f;
+        public float _scaleFactor;
         public int frameWidth;
         public int frameHeight;
 
@@ -266,10 +310,10 @@ public class CameraUtil {
         public float _cy;
         public float _s;
 
-        // Camera Extrinsics
-        public float _tx;
-        public float _ty;
-        public float _tz;
+        // Camera Extrinsics, sensor coordinate
+        public float _tx;   // horizontal points to right
+        public float _ty;   // vertical points up
+        public float _tz;   // towards outside of the screen
 
         public float _qx;
         public float _qy;
@@ -283,40 +327,39 @@ public class CameraUtil {
         public float _p1;
         public float _p2;
 
-        private int DEFAULT_WIDTH = 640;
-        private int DEFAULT_HEIGHT = 480;
+        private float DEFAULT_ASPECT_RATIO = 4.f/3.f;
 
         public CameraParam() {}
 
-        public CameraParam(int width, int height,
+        public CameraParam(int width, int height, float scaleFactor,
                            float fx, float fy, float cx, float cy, float s,
                            float tx, float ty, float tz,
                            float qx, float qy, float qz, float qw,
                            float k1, float k2, float k3, float p1, float p2) {
 
-            setFrameSize(width, height);
+            setFrameSize(width, height, scaleFactor);
             setInrinsics(fx, fy, cx, cy, s);
             setExtrinsic(tx, ty, tz, qx, qy, qz, qw);
             setDistortionParam(k1, k2, k3, p1, p2);
         }
 
-        public void setFrameSize(int width, int height){
-            frameWidth = width;
-            frameHeight = height;
-            if((float)width/DEFAULT_WIDTH == (float)height/DEFAULT_HEIGHT){
-                _scaleFactor = (float)width/DEFAULT_WIDTH;
+        public void setFrameSize(int width, int height, float scaleFactor){
+            if((float)width/height == DEFAULT_ASPECT_RATIO){
+                frameWidth = width;
+                frameHeight = height;
+                _scaleFactor = scaleFactor;
             }else{
-                throw new IllegalArgumentException("Size not match default aspect ratio: " + String.valueOf(DEFAULT_WIDTH) + ":" + String.valueOf(DEFAULT_HEIGHT));
+                throw new IllegalArgumentException("Size not match default aspect ratio: " + String.valueOf(DEFAULT_ASPECT_RATIO));
             }
         }
 
         public float[] getFrameSize(){ return new float[] {frameWidth, frameHeight}; }
 
         public void setInrinsics(float fx, float fy, float cx, float cy, float s){
-            _fx = fx;
-            _fy = fy;
-            _cx = cx;
-            _cy = cy;
+            _fx = fx * _scaleFactor;
+            _fy = fy * _scaleFactor;
+            _cx = cx * _scaleFactor;
+            _cy = cy * _scaleFactor;
             _s = s;
         }
 

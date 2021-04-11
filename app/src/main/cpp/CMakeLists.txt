@@ -7,6 +7,9 @@ set(OPENCV_INCLUDE_DIRECTORY "/media/gchaozheng/codes/Libs/opencv/build-arm64-v8
 include_directories(${EIGEN3_INCLUDE_DIRECTORY})
 include_directories(${OPENCV_INCLUDE_DIRECTORY})
 
+message(${libs}/3rdparty/${ANDROID_ABI})
+message(${libs}/opencv/${ANDROID_ABI})
+
 link_directories(${libs}/3rdparty/${ANDROID_ABI}
                  ${libs}/opencv/${ANDROID_ABI})
 

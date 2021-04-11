@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Camera;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -49,7 +50,7 @@ public class DepthCameraCapture {
     public CameraUtil.CameraParam mCameraParam;
 
 
-    public DepthCameraCapture(Context context, @NonNull TextureView textureView) {
+    public DepthCameraCapture(@NonNull Context context, @NonNull TextureView textureView) {
         mMainActivity = (Activity) context;
         mCameraManager = (CameraManager) mMainActivity.getSystemService(Context.CAMERA_SERVICE);
         mCameraId = "4";            // Fixed camera id used for samsung s20+
@@ -93,11 +94,6 @@ public class DepthCameraCapture {
 
             mCameraDevice = cameraDevice;
 
-            // Configure surface texture for preview
-            SurfaceTexture texture = mTextureView.getSurfaceTexture();
-            assert texture != null;
-            texture.setDefaultBufferSize(mCameraParam.frameWidth, mCameraParam.frameHeight);
-
             // Configure image reader for image messaging
             mImageReader = ImageReader.newInstance(mCameraParam.frameWidth, mCameraParam.frameHeight, ImageFormat.DEPTH16, 2);
             mImageReader.setOnImageAvailableListener(depthImageAvailableListener, null);
@@ -105,6 +101,7 @@ public class DepthCameraCapture {
             try{
                 mCaptureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                 mCaptureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+                mCaptureRequestBuilder.addTarget(mImageReader.getSurface());
                 cameraDevice.createCaptureSession(Arrays.asList(mImageReader.getSurface()), depthCameraCaptureSessionStateCallback, null);
             } catch (CameraAccessException e){
                 e.printStackTrace();
@@ -138,8 +135,15 @@ public class DepthCameraCapture {
             depthShort = CameraUtil.undistortion(depthShort, mCameraParam);
             depthShort = CameraUtil.depthRectify(depthShort, mCameraParam, CameraUtil.colorCameraParam);
 
-//            byte[] depthGray = CameraUtil.convertShortToGray(depthShort, mCameraParam, maxDepthThreshold);
-//            Bitmap grayBitmap = Bitmap.createBitmap(mCameraParam.frameWidth, mCameraParam.frameHeight, Bitmap.Config.ARGB_8888);
+//            byte[] depthGray = CameraUtil.convertShortToGray(depthShort, maxDepthThreshold);
+//            int[] depthARGB = CameraUtil.convertGrayToARGB(depthGray);
+
+            int[] depthARGB = CameraUtil.convertShortToARGB(depthShort, maxDepthThreshold);
+
+            Bitmap depthBitmap = Bitmap.createBitmap(mCameraParam.frameWidth, mCameraParam.frameHeight, Bitmap.Config.ARGB_8888);
+            depthBitmap.setPixels(depthARGB, 0, mCameraParam.frameWidth, 0, 0, mCameraParam.frameWidth, mCameraParam.frameHeight);
+            depthBitmap = Bitmap.createScaledBitmap(depthBitmap, mTextureView.getWidth(), mTextureView.getHeight(), false);
+            CameraUtil.renderBitmapToTextureview(depthBitmap, mTextureView);
 
             synchronized (frameLock){
                 latestFrame = depthShort;
@@ -169,7 +173,7 @@ public class DepthCameraCapture {
         }
     };
 
-    private boolean RosInit(){
+    private boolean rosInit(){
         // TODO Implement ROS initialization, create new ros node ?
         return true;
     }

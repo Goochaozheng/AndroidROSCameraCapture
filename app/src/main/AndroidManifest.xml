@@ -17,7 +17,9 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <activity android:name="com.MobileSLAM.RosCameraCapture.MainActivity">
+        <activity
+            android:name="com.MobileSLAM.RosCameraCapture.MainActivity"
+            android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
