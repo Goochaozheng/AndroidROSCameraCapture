@@ -21,7 +21,7 @@ import org.w3c.dom.Text;
 import java.net.URI;
 
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends RosActivity {
 
     private ColorCameraCapture mColorCameraCapture;
     private DepthCameraCapture mDepthCameraCapture;
@@ -34,11 +34,11 @@ public class MainActivity extends AppCompatActivity {
         System.loadLibrary("camera-util");
     }
 
-//    public MainActivity() {
-//        super("ros_test", "ros_test");
-//    }
+    public MainActivity() {
+        super("ros_test", "ros_test", URI.create("http://100.66.214.186:11311"));
+    }
 
-//    @Override
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
@@ -61,44 +61,12 @@ public class MainActivity extends AppCompatActivity {
         mDepthCameraCapture.startCameraPreview();
     }
 
-//    @Override
-//    public void init(NodeMainExecutor nodeMainExecutor) {
-//        NodeConfiguration nodeConfiguration = NodeConfiguration.newPublic(getRosHostname());
-//        nodeConfiguration.setMasterUri(getMasterUri());
-//        nodeMainExecutor.execute(new NodeMain() {
-//            @Override
-//            public GraphName getDefaultNodeName() {
-//                return GraphName.of("ros_test");
-//            }
-//
-//            @Override
-//            public void onStart(ConnectedNode connectedNode) {
-////                final Publisher<std_msgs.String> pub =  connectedNode.newPublisher("/test", std_msgs.String._TYPE);
-////                connectedNode.executeCancellableLoop(new CancellableLoop() {
-////                    @Override
-////                    protected void loop() throws InterruptedException {
-////                        std_msgs.String msg = pub.newMessage();
-////                        msg.setData("hello world");
-////                        pub.publish(msg);
-////                        Thread.sleep(1000);
-////                    }
-////                });
-//            }
-//
-//            @Override
-//            public void onShutdown(Node node) {
-//
-//            }
-//
-//            @Override
-//            public void onShutdownComplete(Node node) {
-//
-//            }
-//
-//            @Override
-//            public void onError(Node node, Throwable throwable) {
-//
-//            }
-//        }, nodeConfiguration);
-//    }
+    @Override
+    public void init(NodeMainExecutor nodeMainExecutor) {
+        NodeConfiguration nodeConfiguration = NodeConfiguration.newPublic(getRosHostname());
+        nodeConfiguration.setMasterUri(getMasterUri());
+
+        mColorCameraCapture.initRos(nodeMainExecutor, nodeConfiguration);
+        mDepthCameraCapture.initRos(nodeMainExecutor, nodeConfiguration);
+    }
 }

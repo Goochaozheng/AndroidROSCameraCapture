@@ -22,15 +22,31 @@ import android.support.annotation.RequiresApi;
 import android.util.Log;
 import android.view.TextureView;
 
+import org.ros.android.RosActivity;
+import org.ros.concurrent.CancellableLoop;
+import org.ros.namespace.GraphName;
+import org.ros.node.ConnectedNode;
+import org.ros.node.Node;
+import org.ros.node.NodeConfiguration;
+import org.ros.node.NodeMain;
+import org.ros.node.NodeMainExecutor;
+import org.ros.node.topic.Publisher;
+
 import java.nio.ShortBuffer;
 import java.util.Arrays;
+
+import java.lang.String;
+import java.util.Calendar;
+import java.util.Date;
+
+import std_msgs.*;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 public class DepthCameraCapture {
 
     final static private String TAG = DepthCameraCapture.class.getSimpleName();
 
-    private Activity mMainActivity;
+    private RosActivity mMainActivity;
     private TextureView mTextureView;
     private ImageReader mImageReader;
 
@@ -51,7 +67,7 @@ public class DepthCameraCapture {
 
 
     public DepthCameraCapture(@NonNull Context context, @NonNull TextureView textureView) {
-        mMainActivity = (Activity) context;
+        mMainActivity = (RosActivity) context;
         mCameraManager = (CameraManager) mMainActivity.getSystemService(Context.CAMERA_SERVICE);
         mCameraId = "4";            // Fixed camera id used for samsung s20+
         mTextureView = textureView;
@@ -60,15 +76,78 @@ public class DepthCameraCapture {
 
 
     @SuppressLint("MissingPermission")
-    public boolean startCameraPreview() {
-        try {
-            mCameraManager.openCamera(mCameraId, depthCameraStateCallback, null);
-        }catch (CameraAccessException e){
-            e.printStackTrace();
-            return false;
-        }
-        return true;
+    public void startCameraPreview() {
+
+        mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override
+            public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
+                try {
+                    mCameraManager.openCamera(mCameraId, depthCameraStateCallback, null);
+                }catch (CameraAccessException e){
+                    e.printStackTrace();
+                }
+            }
+
+            @Override
+            public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) { }
+
+            @Override
+            public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+                return false;
+            }
+
+            @Override
+            public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) { }
+        });
+
     }
+
+    public void initRos(NodeMainExecutor nodeMainExecutor, NodeConfiguration nodeConfiguration){
+        nodeConfiguration.setNodeName("depth_node");
+        nodeMainExecutor.execute(depthRosNode, nodeConfiguration);
+    }
+
+
+    private final NodeMain depthRosNode = new NodeMain() {
+        @Override
+        public GraphName getDefaultNodeName() {
+            return GraphName.of("ros_test");
+        }
+
+        @Override
+        public void onStart(ConnectedNode connectedNode) {
+            final Publisher<std_msgs.String> pub = connectedNode.newPublisher("/depth_capture", std_msgs.String._TYPE);
+
+            // TODO get latest frame and send as image message
+
+            connectedNode.executeCancellableLoop(new CancellableLoop() {
+                @Override
+                protected void loop() throws InterruptedException {
+                    std_msgs.String msg = pub.newMessage();
+                    Date timestamp = Calendar.getInstance().getTime();
+                    msg.setData("Depth Frame: " + timestamp);
+                    pub.publish(msg);
+                    Thread.sleep(1000);
+                    Log.d(TAG, "Depth capture, Message send;");
+                }
+            });
+        }
+
+        @Override
+        public void onShutdown(Node node) {
+
+        }
+
+        @Override
+        public void onShutdownComplete(Node node) {
+
+        }
+
+        @Override
+        public void onError(Node node, Throwable throwable) {
+
+        }
+    };
 
 
     // TODO get latest frame and send as message by ROS

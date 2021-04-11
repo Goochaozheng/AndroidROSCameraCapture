@@ -23,14 +23,29 @@ import android.util.Log;
 import android.view.Surface;
 import android.view.TextureView;
 
+import org.ros.android.RosActivity;
+import org.ros.concurrent.CancellableLoop;
+import org.ros.namespace.GraphName;
+import org.ros.node.ConnectedNode;
+import org.ros.node.Node;
+import org.ros.node.NodeConfiguration;
+import org.ros.node.NodeMain;
+import org.ros.node.NodeMainExecutor;
+import org.ros.node.topic.Publisher;
+
+import java.lang.String;
 import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Date;
+
+import std_msgs.*;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 public class ColorCameraCapture {
 
     final static private String TAG = ColorCameraCapture.class.getSimpleName();
 
-    private Activity mMainActivity;
+    private RosActivity mMainActivity;
     private TextureView mTextureView;
     private ImageReader mImageReader;
 
@@ -46,7 +61,7 @@ public class ColorCameraCapture {
 
 
     public ColorCameraCapture(@NonNull Context context, @NonNull TextureView textureView) {
-        mMainActivity = (Activity) context;
+        mMainActivity = (RosActivity) context;
         mCameraManager = (CameraManager) mMainActivity.getSystemService(Context.CAMERA_SERVICE);
         mCameraId = "0";            // Fixed camera id used for samsung s20+
         mTextureView = textureView;
@@ -82,6 +97,54 @@ public class ColorCameraCapture {
     }
 
 
+    public void initRos(NodeMainExecutor nodeMainExecutor, NodeConfiguration nodeConfiguration){
+        nodeConfiguration.setNodeName("color_node");
+        nodeMainExecutor.execute(colorRosNode, nodeConfiguration);
+    }
+
+
+    private NodeMain colorRosNode = new NodeMain() {
+        @Override
+        public GraphName getDefaultNodeName() {
+            return GraphName.of("ros_test");
+        }
+
+        @Override
+        public void onStart(ConnectedNode connectedNode) {
+            final Publisher<std_msgs.String> pub =  connectedNode.newPublisher("/color_capture", std_msgs.String._TYPE);
+
+            // TODO get latest frame and send as image message
+
+            connectedNode.executeCancellableLoop(new CancellableLoop() {
+                @Override
+                protected void loop() throws InterruptedException {
+                    std_msgs.String msg = pub.newMessage();
+                    Date timestamp = Calendar.getInstance().getTime();
+                    msg.setData("Color Frame: " + timestamp);
+                    pub.publish(msg);
+                    Thread.sleep(1000);
+                    Log.d(TAG, "Color capture, Message send;");
+                }
+            });
+        }
+
+        @Override
+        public void onShutdown(Node node) {
+
+        }
+
+        @Override
+        public void onShutdownComplete(Node node) {
+
+        }
+
+        @Override
+        public void onError(Node node, Throwable throwable) {
+
+        }
+    };
+
+
     // Callback for camera device state change
     private CameraDevice.StateCallback colorCameraStateCallback = new CameraDevice.StateCallback(){
 
@@ -115,7 +178,6 @@ public class ColorCameraCapture {
                 mCaptureRequestBuilder.addTarget(mImageReader.getSurface());
 
                 // create capture session
-//                cameraDevice.createCaptureSession(Arrays.asList(mImageReader.getSurface()), colorCameraCaptureSessionStateCallbakc, null);
                 cameraDevice.createCaptureSession(Arrays.asList(previewSurface, mImageReader.getSurface()), colorCameraCaptureSessionStateCallbakc, null);
 
             } catch (CameraAccessException e){
@@ -189,9 +251,5 @@ public class ColorCameraCapture {
     };
 
 
-    private boolean rosInit(){
-        // TODO Implement ROS initialization, create new ros node ?
-        return true;
-    }
 
 }
