@@ -57,7 +57,7 @@ public class MainActivity extends AppCompatActivity {
         mColorCameraCapture = new ColorCameraCapture(this, colorView);
         mDepthCameraCapture = new DepthCameraCapture(this, depthView);
 
-//        mColorCameraCapture.startCameraPreview();
+        mColorCameraCapture.startCameraPreview();
         mDepthCameraCapture.startCameraPreview();
     }
 

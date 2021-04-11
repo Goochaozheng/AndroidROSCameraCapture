@@ -5,6 +5,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -40,9 +42,6 @@ public class ColorCameraCapture {
     public boolean hasNext = false;
     public short[] latestFrame;
 
-    public int frameWidth;
-    public int frameHeight;
-
     public CameraUtil.CameraParam mCameraParam;
 
 
@@ -56,14 +55,30 @@ public class ColorCameraCapture {
 
 
     @SuppressLint("MissingPermission")
-    public boolean startCameraPreview(){
-        try {
-            mCameraManager.openCamera(mCameraId, colorCameraStateCallback, null);
-        }catch (CameraAccessException e){
-            e.printStackTrace();
-            return false;
-        }
-        return true;
+    public void startCameraPreview(){
+
+        mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override
+            public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
+                try {
+                    mCameraManager.openCamera(mCameraId, colorCameraStateCallback, null);
+                }catch (CameraAccessException e){
+                    e.printStackTrace();
+                }
+            }
+
+            @Override
+            public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) { }
+
+            @Override
+            public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+                return false;
+            }
+
+            @Override
+            public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) { }
+        });
+
     }
 
 
@@ -74,11 +89,19 @@ public class ColorCameraCapture {
         public void onOpened(@NonNull CameraDevice cameraDevice) {
             Log.i(TAG, "Camera " + cameraDevice.getId() + " Opened");
 
-            // Configure surface texture for preview
-//            SurfaceTexture texture = mTextureView.getSurfaceTexture();
-//            assert texture != null;
-//            texture.setDefaultBufferSize(frameWidth, frameHeight);
-//            Surface previewSurface = new Surface(texture);
+            // Set Texture Transform for Landscape Orientation
+            Matrix matrix = new Matrix();
+            RectF textureRectF = new RectF(0, 0, mTextureView.getWidth(), mTextureView.getHeight());
+            RectF previewRectF = new RectF(0, 0, mTextureView.getHeight(), mTextureView.getWidth());
+            previewRectF.offset(textureRectF.centerX() - previewRectF.centerX(), textureRectF.centerY() - previewRectF.centerY());
+            matrix.setRectToRect(textureRectF, previewRectF, Matrix.ScaleToFit.FILL);
+            matrix.postRotate(-90, textureRectF.centerX(), textureRectF.centerY());
+            mTextureView.setTransform(matrix);
+
+            // Surface Texture for Preview
+            SurfaceTexture colorSurfaceTexture = mTextureView.getSurfaceTexture();
+            colorSurfaceTexture.setDefaultBufferSize(mCameraParam.frameWidth, mCameraParam.frameHeight);
+            Surface previewSurface = new Surface(colorSurfaceTexture);
 
             // Configure image reader for image messaging
             mImageReader = ImageReader.newInstance(mCameraParam.frameWidth, mCameraParam.frameHeight, ImageFormat.YUV_420_888, 2);
@@ -88,11 +111,12 @@ public class ColorCameraCapture {
             try{
                 mCaptureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                 mCaptureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-//                mCaptureRequestBuilder.addTarget(previewSurface);
+                mCaptureRequestBuilder.addTarget(previewSurface);
                 mCaptureRequestBuilder.addTarget(mImageReader.getSurface());
 
                 // create capture session
-                cameraDevice.createCaptureSession(Arrays.asList(mImageReader.getSurface()), colorCameraCaptureSessionStateCallbakc, null);
+//                cameraDevice.createCaptureSession(Arrays.asList(mImageReader.getSurface()), colorCameraCaptureSessionStateCallbakc, null);
+                cameraDevice.createCaptureSession(Arrays.asList(previewSurface, mImageReader.getSurface()), colorCameraCaptureSessionStateCallbakc, null);
 
             } catch (CameraAccessException e){
                 e.printStackTrace();
@@ -117,7 +141,7 @@ public class ColorCameraCapture {
         @Override
         public void onImageAvailable(ImageReader imageReader) {
             Image img = imageReader.acquireLatestImage();
-            assert img != null;
+            if(img == null) return;
 
             Image.Plane[] planes = img.getPlanes();
             byte[][] yuvBytes = new byte[planes.length][];
@@ -130,16 +154,16 @@ public class ColorCameraCapture {
             final int uvRowStride = planes[1].getRowStride();
             final int uvPixelStride = planes[1].getPixelStride();
 
-            int[] argbUint32 = CameraUtil.convertYUVToARGB(yuvBytes[0], yuvBytes[1], yuvBytes[2],
-                                        yRowStride, uvRowStride, uvPixelStride,
-                                        mCameraParam.frameWidth, mCameraParam.frameHeight);
-
-            argbUint32 = CameraUtil.undistortion(argbUint32, mCameraParam);
-
-            Bitmap colorBitmap = Bitmap.createBitmap(mCameraParam.frameWidth, mCameraParam.frameHeight, Bitmap.Config.ARGB_8888);
-            colorBitmap.setPixels(argbUint32, 0, mCameraParam.frameWidth, 0, 0, mCameraParam.frameWidth, mCameraParam.frameHeight);
-
-            CameraUtil.renderBitmapToTextureview(colorBitmap, mTextureView);
+//            int[] argbUint32 = CameraUtil.convertYUVToARGB(yuvBytes[0], yuvBytes[1], yuvBytes[2],
+//                                        yRowStride, uvRowStride, uvPixelStride,
+//                                        mCameraParam.frameWidth, mCameraParam.frameHeight);
+//
+//            argbUint32 = CameraUtil.undistortion(argbUint32, mCameraParam);
+//
+//            Bitmap colorBitmap = Bitmap.createBitmap(mCameraParam.frameWidth, mCameraParam.frameHeight, Bitmap.Config.ARGB_8888);
+//            colorBitmap.setPixels(argbUint32, 0, mCameraParam.frameWidth, 0, 0, mCameraParam.frameWidth, mCameraParam.frameHeight);
+//            colorBitmap = Bitmap.createScaledBitmap(colorBitmap, mTextureView.getWidth(), mTextureView.getHeight(), false);
+//            CameraUtil.renderBitmapToTextureview(colorBitmap, mTextureView);
 
             img.close();
         }

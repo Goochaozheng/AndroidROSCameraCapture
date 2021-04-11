@@ -9,8 +9,6 @@ typedef unsigned int uint32;
 
 
 
-
-
 extern "C"
 JNIEXPORT jintArray JNICALL
 Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUVToARGB(JNIEnv *env, jclass clazz,
@@ -44,6 +42,7 @@ Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUVToARGB(JNIEnv *env, jc
 
         for(int x=0; x<width; x++){
 
+            int index = y * width + x;
             const int uv_offset = (x >> 1) * uv_pixel_stride;
 
             int nY = pY[x];
@@ -69,7 +68,7 @@ Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUVToARGB(JNIEnv *env, jc
             nG = (nG >> 10) & 0xff;
             nB = (nB >> 10) & 0xff;
 
-            *outData++ = 0xff000000 | (nR << 16) | (nG << 8) | nB;
+            outData[index] = 0xff000000 | (nR << 16) | (nG << 8) | nB;
         }
     }
 

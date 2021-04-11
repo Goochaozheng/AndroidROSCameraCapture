@@ -3,6 +3,7 @@ package com.MobileSLAM.RosCameraCapture;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.util.Log;
+import android.util.Size;
 import android.view.TextureView;
 
 import java.nio.ShortBuffer;
@@ -11,10 +12,23 @@ public class CameraUtil {
 
     private final static String TAG = CameraUtil.class.getSimpleName();
 
+    static final Size[] COLOR_OUTPUT_SIZES = new Size[] {
+            new Size(4032, 3024),   // scale factor: 1.0
+            new Size(1440, 1080),   // scale factor: 0.3571
+            new Size(960, 720),     // scale factor: 0.2381
+            new Size(640, 480),     // scale factor: 0.1587
+            new Size(320, 240)      // scale factor: 0.0794
+    };
+
+    static final Size[] DEPTH_OUTPUT_SIZES = new Size[] {
+            new Size(640, 480),     // scale factor: 1.0
+            new Size(320, 240)      // scale factor: 0.5
+    };
+
     static public CameraParam depthCameraParam = new CameraParam(
             // frame size
-            320,
-            240,
+            DEPTH_OUTPUT_SIZES[1].getWidth(),
+            DEPTH_OUTPUT_SIZES[1].getHeight(),
             0.5f,
             // intrinsics
             536.9581f,
@@ -40,9 +54,9 @@ public class CameraUtil {
 
     static public CameraParam colorCameraParam = new CameraParam(
             // frame size
-            320,
-            240,
-            0.07936f,
+            COLOR_OUTPUT_SIZES[1].getWidth(),
+            COLOR_OUTPUT_SIZES[1].getHeight(),
+            0.3571f,
             // intrinsics
             3054.3071f,
             3052.0754f,
@@ -220,8 +234,9 @@ public class CameraUtil {
                 float color_z_2 = color_x*(2*qx_2*qz_2+2*qy_2*qw_2) + color_y*(2*qy_2*qz_2-2*qx_2*qw_2) + color_z*(1-2*qx_2*qx_2-2*qy_2*qy_2);
 
                 // color camera to color image
-                float color_u = colorParam._fx * color_x_2 / color_z_2 + colorParam._cx;
-                float color_v = colorParam._fy * color_y_2 / color_z_2 + colorParam._cy;
+                // using intrinsics of color camera under 320x240 resolution
+                float color_u = 242.3898f * color_x_2 / color_z_2 + 157.9433f;
+                float color_v = 242.2127f * color_y_2 / color_z_2 + 120.0223f;
 
                 // assign depth value to new pixel
                 if(color_u >= 0 && color_v >=0 && color_u <= width && color_v <= height){

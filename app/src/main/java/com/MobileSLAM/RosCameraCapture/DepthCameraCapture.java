@@ -128,10 +128,11 @@ public class DepthCameraCapture {
         @Override
         public void onImageAvailable(ImageReader imageReader) {
             Image img = imageReader.acquireLatestImage();
-            assert img != null;
+            if(img == null) return;
 
             ShortBuffer depthShortBuffer = img.getPlanes()[0].getBuffer().asShortBuffer();
             short[] depthShort = CameraUtil.parseDepth16(depthShortBuffer, mCameraParam.frameWidth, mCameraParam.frameHeight, depthConfidenceThreshold);
+
             depthShort = CameraUtil.undistortion(depthShort, mCameraParam);
             depthShort = CameraUtil.depthRectify(depthShort, mCameraParam, CameraUtil.colorCameraParam);
 
