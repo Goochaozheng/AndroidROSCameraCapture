@@ -42,7 +42,7 @@ import java.util.Date;
 import std_msgs.*;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-public class DepthCameraCapture {
+public class DepthCameraCapture implements CameraCapture {
 
     final static private String TAG = DepthCameraCapture.class.getSimpleName();
 
@@ -58,7 +58,9 @@ public class DepthCameraCapture {
 
     private Object frameLock = new Object();
     public boolean hasNext = false;
-    public short[] latestFrame;
+    public byte[] latestFrame;
+
+    private CameraPublisher mCameraPublisher;
 
     public float depthConfidenceThreshold = 0.1f;
     public short maxDepthThreshold = 5000;            // Max Depth, in millimeter
@@ -76,6 +78,7 @@ public class DepthCameraCapture {
 
 
     @SuppressLint("MissingPermission")
+    @Override
     public void startCameraPreview() {
 
         mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
@@ -102,57 +105,24 @@ public class DepthCameraCapture {
 
     }
 
-    public void initRos(NodeMainExecutor nodeMainExecutor, NodeConfiguration nodeConfiguration){
+    @Override
+    public void startRosNode(NodeMainExecutor nodeMainExecutor){
+
+        NodeConfiguration nodeConfiguration = NodeConfiguration.newPublic(mMainActivity.getRosHostname());
+        nodeConfiguration.setMasterUri(mMainActivity.getMasterUri());
         nodeConfiguration.setNodeName("depth_node");
+
+        CameraPublisher depthRosNode = new CameraPublisher("/depth_image", mCameraParam.frameWidth, mCameraParam.frameHeight,
+                mCameraParam.frameWidth * 2, "encoding");
+
         nodeMainExecutor.execute(depthRosNode, nodeConfiguration);
     }
 
 
-    private final NodeMain depthRosNode = new NodeMain() {
-        @Override
-        public GraphName getDefaultNodeName() {
-            return GraphName.of("ros_test");
-        }
-
-        @Override
-        public void onStart(ConnectedNode connectedNode) {
-            final Publisher<std_msgs.String> pub = connectedNode.newPublisher("/depth_capture", std_msgs.String._TYPE);
-
-            // TODO get latest frame and send as image message
-
-            connectedNode.executeCancellableLoop(new CancellableLoop() {
-                @Override
-                protected void loop() throws InterruptedException {
-                    std_msgs.String msg = pub.newMessage();
-                    Date timestamp = Calendar.getInstance().getTime();
-                    msg.setData("Depth Frame: " + timestamp);
-                    pub.publish(msg);
-                    Thread.sleep(1000);
-                    Log.d(TAG, "Depth capture, Message send;");
-                }
-            });
-        }
-
-        @Override
-        public void onShutdown(Node node) {
-
-        }
-
-        @Override
-        public void onShutdownComplete(Node node) {
-
-        }
-
-        @Override
-        public void onError(Node node, Throwable throwable) {
-
-        }
-    };
-
-
-    // TODO get latest frame and send as message by ROS
-    public short[] getLatestFrame() throws InterruptedException {
-        short[] copyData;
+    // TODO get latest frame in byte[]
+    @Override
+    public byte[] getLatestFrame() throws InterruptedException {
+        byte[] copyData;
         synchronized (frameLock){
             if(!hasNext){
                 frameLock.wait();
@@ -215,6 +185,8 @@ public class DepthCameraCapture {
             depthShort = CameraUtil.undistortion(depthShort, mCameraParam);
             depthShort = CameraUtil.depthRectify(depthShort, mCameraParam, CameraUtil.colorCameraParam);
 
+//            byte[] depthByte = CameraUtil.shortToByte(depthShort, mCameraParam);
+
 //            byte[] depthGray = CameraUtil.convertShortToGray(depthShort, maxDepthThreshold);
 //            int[] depthARGB = CameraUtil.convertGrayToARGB(depthGray);
 
@@ -226,7 +198,7 @@ public class DepthCameraCapture {
             CameraUtil.renderBitmapToTextureview(depthBitmap, mTextureView);
 
             synchronized (frameLock){
-                latestFrame = depthShort;
+//                latestFrame = depthShort;
                 hasNext = true;
                 frameLock.notifyAll();
             }
@@ -253,10 +225,6 @@ public class DepthCameraCapture {
         }
     };
 
-    private boolean rosInit(){
-        // TODO Implement ROS initialization, create new ros node ?
-        return true;
-    }
 
 
 }

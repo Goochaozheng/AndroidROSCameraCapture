@@ -312,6 +312,12 @@ public class CameraUtil {
         view.unlockCanvasAndPost(canvas);
     }
 
+//    public static byte[] shortToByte(short[] depthShort, CameraParam mCameraParam) {
+//
+//        byte[] res = new byte[depthShort]
+//
+//    }
+
     static public class CameraParam{
 
         public float _scaleFactor;

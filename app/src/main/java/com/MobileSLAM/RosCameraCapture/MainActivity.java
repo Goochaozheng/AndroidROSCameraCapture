@@ -5,6 +5,7 @@ import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.TextureView;
 
 import org.ros.android.RosActivity;
@@ -20,8 +21,11 @@ import org.w3c.dom.Text;
 
 import java.net.URI;
 
+//import rosjava_custom_srv.
 
 public class MainActivity extends RosActivity {
+
+    private static final String TAG = MainActivity.class.getSimpleName();
 
     private ColorCameraCapture mColorCameraCapture;
     private DepthCameraCapture mDepthCameraCapture;
@@ -63,10 +67,10 @@ public class MainActivity extends RosActivity {
 
     @Override
     public void init(NodeMainExecutor nodeMainExecutor) {
-        NodeConfiguration nodeConfiguration = NodeConfiguration.newPublic(getRosHostname());
-        nodeConfiguration.setMasterUri(getMasterUri());
 
-        mColorCameraCapture.initRos(nodeMainExecutor, nodeConfiguration);
-        mDepthCameraCapture.initRos(nodeMainExecutor, nodeConfiguration);
+        Log.d(TAG, "Main Thread: " + String.valueOf(Thread.currentThread().getId()));
+
+        mColorCameraCapture.startRosNode(nodeMainExecutor);
+        mDepthCameraCapture.startRosNode(nodeMainExecutor);
     }
 }
