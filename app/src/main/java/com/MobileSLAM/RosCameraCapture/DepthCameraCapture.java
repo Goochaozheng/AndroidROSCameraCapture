@@ -42,7 +42,7 @@ import java.util.Date;
 import std_msgs.*;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-public class DepthCameraCapture implements CameraCapture {
+public class DepthCameraCapture {
 
     final static private String TAG = DepthCameraCapture.class.getSimpleName();
 
@@ -60,8 +60,6 @@ public class DepthCameraCapture implements CameraCapture {
     public boolean hasNext = false;
     public byte[] latestFrame;
 
-    private CameraPublisher mCameraPublisher;
-
     public float depthConfidenceThreshold = 0.1f;
     public short maxDepthThreshold = 5000;            // Max Depth, in millimeter
 
@@ -78,7 +76,6 @@ public class DepthCameraCapture implements CameraCapture {
 
 
     @SuppressLint("MissingPermission")
-    @Override
     public void startCameraPreview() {
 
         mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
@@ -105,7 +102,6 @@ public class DepthCameraCapture implements CameraCapture {
 
     }
 
-    @Override
     public void startRosNode(NodeMainExecutor nodeMainExecutor){
 
         NodeConfiguration nodeConfiguration = NodeConfiguration.newPublic(mMainActivity.getRosHostname());

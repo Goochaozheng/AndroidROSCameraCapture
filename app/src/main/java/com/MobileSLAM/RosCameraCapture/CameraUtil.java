@@ -13,11 +13,11 @@ public class CameraUtil {
     private final static String TAG = CameraUtil.class.getSimpleName();
 
     static final Size[] COLOR_OUTPUT_SIZES = new Size[] {
-            new Size(4032, 3024),   // scale factor: 1.0
-            new Size(1440, 1080),   // scale factor: 0.3571
-            new Size(960, 720),     // scale factor: 0.2381
-            new Size(640, 480),     // scale factor: 0.1587
-            new Size(320, 240)      // scale factor: 0.0794
+            new Size(4032, 3024),   // 0, scale factor: 1.0
+            new Size(1440, 1080),   // 1, scale factor: 0.3571
+            new Size(960, 720),     // 2, scale factor: 0.2381
+            new Size(640, 480),     // 3, scale factor: 0.1587
+            new Size(320, 240)      // 4, scale factor: 0.0794
     };
 
     static final Size[] DEPTH_OUTPUT_SIZES = new Size[] {
