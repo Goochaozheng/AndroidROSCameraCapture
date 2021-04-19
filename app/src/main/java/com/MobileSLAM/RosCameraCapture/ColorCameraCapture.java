@@ -23,6 +23,7 @@ import android.util.Log;
 import android.view.Surface;
 import android.view.TextureView;
 
+import org.apache.commons.lang.ArrayUtils;
 import org.ros.android.RosActivity;
 import org.ros.concurrent.CancellableLoop;
 import org.ros.namespace.GraphName;
@@ -55,7 +56,16 @@ public class ColorCameraCapture implements CameraCapture{
 
     private Object frameLock = new Object();
     public boolean hasNext = false;
-    public byte[] latestFrame;
+
+    private byte[] latestFrame_y;
+    private byte[] latestFrame_u;
+    private byte[] latestFrame_v;
+
+    private byte[] latestFrame;
+
+    public int yRowStride;
+    public int uvRowStride;
+    public int uvPixelStride;
 
     public CameraUtil.CameraParam mCameraParam;
 
@@ -100,20 +110,49 @@ public class ColorCameraCapture implements CameraCapture{
 
     @Override
     public void startRosNode(NodeMainExecutor nodeMainExecutor){
+
         NodeConfiguration nodeConfiguration = NodeConfiguration.newPublic(mMainActivity.getRosHostname());
         nodeConfiguration.setMasterUri(mMainActivity.getMasterUri());
         nodeConfiguration.setNodeName("color_node");
 
-        CameraPublisher colorRosNode = new CameraPublisher("/color_image", mCameraParam.frameWidth, mCameraParam.frameHeight,
-                mCameraParam.frameWidth * 2, "encoding");
+        CameraPublisher colorRosNode = new CameraPublisher(
+                "/color",
+                mCameraParam.frameWidth,
+                mCameraParam.frameHeight,
+                mCameraParam.frameWidth * 4,
+                "rgba8",
+                this);
 
         nodeMainExecutor.execute(colorRosNode, nodeConfiguration);
     }
 
-    // TODO get latest frame in byte[]
-    @Override
-    public byte[] getLatestFrame() throws InterruptedException {
-        return new byte[0];
+    // Return color frame in YUV arrays
+    public byte[][] getLatestFrame_yuv() throws InterruptedException {
+//        return new byte[mCameraParam.frameWidth * mCameraParam.frameHeight * 4];
+        byte[][] copyData = new byte[3][];
+        synchronized (frameLock){
+            if(!hasNext){
+                frameLock.wait();
+            }
+            copyData[0] = Arrays.copyOf(latestFrame_y, latestFrame_y.length);
+            copyData[1] = Arrays.copyOf(latestFrame_u, latestFrame_u.length);
+            copyData[2] = Arrays.copyOf(latestFrame_v, latestFrame_v.length);
+            hasNext = false;
+        }
+        return copyData;
+    }
+
+    // Return frame in RGB arrays
+    public byte[] getLatestFrame() throws InterruptedException{
+        byte[] copyData;
+        synchronized (frameLock){
+            if(!hasNext){
+                frameLock.wait();
+            }
+            copyData = Arrays.copyOf(latestFrame, latestFrame.length);
+            hasNext = false;
+        }
+        return copyData;
     }
 
     // Callback for camera device state change
@@ -173,6 +212,9 @@ public class ColorCameraCapture implements CameraCapture{
     private ImageReader.OnImageAvailableListener colorImageAvailableListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader imageReader) {
+
+            Long t1 = System.nanoTime();
+
             Image img = imageReader.acquireLatestImage();
             if(img == null) return;
 
@@ -183,22 +225,47 @@ public class ColorCameraCapture implements CameraCapture{
                 planes[i].getBuffer().get(yuvBytes[i]);
             }
 
-            final int yRowStride = planes[0].getRowStride();
-            final int uvRowStride = planes[1].getRowStride();
-            final int uvPixelStride = planes[1].getPixelStride();
+//            yRowStride = planes[0].getRowStride();
+//            uvRowStride = planes[1].getRowStride();
+//            uvPixelStride = planes[1].getPixelStride();
 
-//            int[] argbUint32 = CameraUtil.convertYUVToARGB(yuvBytes[0], yuvBytes[1], yuvBytes[2],
+//            byte[] argbByte = CameraUtil.convertYUVToARGB(yuvBytes[0], yuvBytes[1], yuvBytes[2],
 //                                        yRowStride, uvRowStride, uvPixelStride,
 //                                        mCameraParam.frameWidth, mCameraParam.frameHeight);
-//
+
+//            int[] argbUint32 = CameraUtil.convertByteToUint32(argbByte, mCameraParam.frameWidth, mCameraParam.frameHeight, 4);
+
+//            int[] argbUint32 = CameraUtil.convertYUVToARGBUint32(yuvBytes[0], yuvBytes[1], yuvBytes[2],
+//                                        yRowStride, uvRowStride, uvPixelStride,
+//                                        mCameraParam.frameWidth, mCameraParam.frameHeight);
+
 //            argbUint32 = CameraUtil.undistortion(argbUint32, mCameraParam);
-//
+
 //            Bitmap colorBitmap = Bitmap.createBitmap(mCameraParam.frameWidth, mCameraParam.frameHeight, Bitmap.Config.ARGB_8888);
 //            colorBitmap.setPixels(argbUint32, 0, mCameraParam.frameWidth, 0, 0, mCameraParam.frameWidth, mCameraParam.frameHeight);
 //            colorBitmap = Bitmap.createScaledBitmap(colorBitmap, mTextureView.getWidth(), mTextureView.getHeight(), false);
 //            CameraUtil.renderBitmapToTextureview(colorBitmap, mTextureView);
 
+            synchronized (frameLock){
+
+                yRowStride = planes[0].getRowStride();
+                uvRowStride = planes[1].getRowStride();
+                uvPixelStride = planes[1].getPixelStride();
+
+                latestFrame_y = yuvBytes[0];
+                latestFrame_u = yuvBytes[1];
+                latestFrame_v = yuvBytes[2];
+
+//                latestFrame = argbByte;
+
+                hasNext = true;
+                frameLock.notifyAll();
+            }
+
             img.close();
+
+            Long t2 = System.nanoTime();
+            Log.d("Timing", "Image Reader Process Time: " + String.valueOf((float)(t2 - t1) / 1000000000));
         }
     };
 

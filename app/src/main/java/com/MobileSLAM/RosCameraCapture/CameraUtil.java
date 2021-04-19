@@ -54,8 +54,8 @@ public class CameraUtil {
 
     static public CameraParam colorCameraParam = new CameraParam(
             // frame size
-            COLOR_OUTPUT_SIZES[1].getWidth(),
-            COLOR_OUTPUT_SIZES[1].getHeight(),
+            COLOR_OUTPUT_SIZES[4].getWidth(),
+            COLOR_OUTPUT_SIZES[4].getHeight(),
             0.3571f,
             // intrinsics
             3054.3071f,
@@ -285,7 +285,7 @@ public class CameraUtil {
             if(rawDepth != 0){
                 output[index] = 0xff000000 | (nR << 16) | (nG << 8) | nB;
             }else{
-                output[index] = 0xff000000 | (0 << 16) | (0 << 8) | 0;
+                output[index] = 0xff000000;
             }
         }
 
@@ -302,7 +302,11 @@ public class CameraUtil {
     }
 
 
-    public static native int[] convertYUVToARGB(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
+    public static native byte[] convertYUVToARGB(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
+
+    public static native int[] convertYUVToARGBUint32(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
+
+    public static native byte[] convertYUVToARGB_opencv(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
 
 
     public static void renderBitmapToTextureview(Bitmap bitmap, TextureView view){
@@ -311,6 +315,7 @@ public class CameraUtil {
         canvas.drawBitmap(bitmap, 0, 0, null);
         view.unlockCanvasAndPost(canvas);
     }
+
 
 //    public static byte[] shortToByte(short[] depthShort, CameraParam mCameraParam) {
 //

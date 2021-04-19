@@ -112,15 +112,19 @@ public class DepthCameraCapture implements CameraCapture {
         nodeConfiguration.setMasterUri(mMainActivity.getMasterUri());
         nodeConfiguration.setNodeName("depth_node");
 
-        CameraPublisher depthRosNode = new CameraPublisher("/depth_image", mCameraParam.frameWidth, mCameraParam.frameHeight,
-                mCameraParam.frameWidth * 2, "encoding");
+//        CameraPublisher depthRosNode = new CameraPublisher(
+//                "/depth",
+//                mCameraParam.frameWidth,
+//                mCameraParam.frameHeight,
+//                mCameraParam.frameWidth * 2,
+//                "encoding",
+//                this);
 
-        nodeMainExecutor.execute(depthRosNode, nodeConfiguration);
+//        nodeMainExecutor.execute(depthRosNode, nodeConfiguration);
     }
 
 
     // TODO get latest frame in byte[]
-    @Override
     public byte[] getLatestFrame() throws InterruptedException {
         byte[] copyData;
         synchronized (frameLock){
