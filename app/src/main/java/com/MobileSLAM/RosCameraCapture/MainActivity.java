@@ -39,7 +39,7 @@ public class MainActivity extends RosActivity {
     }
 
     public MainActivity() {
-        super("ros_test", "ros_test", URI.create("http://192.168.34.147:11311"));
+        super("mobile_camera", "mobile_camera", URI.create("http://192.168.34.147:11311"));
     }
 
     @Override
@@ -71,6 +71,6 @@ public class MainActivity extends RosActivity {
         Log.d(TAG, "Main Thread: " + String.valueOf(Thread.currentThread().getId()));
 
         mColorCameraCapture.startRosNode(nodeMainExecutor);
-//        mDepthCameraCapture.startRosNode(nodeMainExecutor);
+        mDepthCameraCapture.startRosNode(nodeMainExecutor);
     }
 }

@@ -54,8 +54,8 @@ public class CameraUtil {
 
     static public CameraParam colorCameraParam = new CameraParam(
             // frame size
-            COLOR_OUTPUT_SIZES[4].getWidth(),
-            COLOR_OUTPUT_SIZES[4].getHeight(),
+            COLOR_OUTPUT_SIZES[1].getWidth(),
+            COLOR_OUTPUT_SIZES[1].getHeight(),
             0.3571f,
             // intrinsics
             3054.3071f,
@@ -79,30 +79,82 @@ public class CameraUtil {
             0
     );
 
-    static public short[] parseDepth16(ShortBuffer shortBuffer, int width, int height, float confidenceThreshold){
-        short[] res = new short[width * height];
+    /**
+     * Parse Android depth output to real depth value in millimeter and measurement confidence
+     * Measurement with confidence lower than threshold will be set as 0
+     * @param shortData
+     * @param width
+     * @param height
+     * @param confidenceThreshold threshold for valid depth measurement
+     * @return depth value in short
+     */
+    static public native short[] parseDepth16(short[] shortData, int width, int height, float confidenceThreshold);
 
-        for(int y=0; y<height; y++){
-            for(int x=0; x<width; x++){
-                int index = width * y + x;
-                short rawDepth = shortBuffer.get(index);
+    /**
+     * Convert YUV frame into RGBA
+     * @param yData
+     * @param uData
+     * @param vData
+     * @param yRowStride
+     * @param uvRowStride
+     * @param uvPixelStride
+     * @param width
+     * @param height
+     * @return byte array for each channel, each pixel takes 4 bytes, R G B A respectively.
+     */
+    public static native byte[] convertYUVToRGBA(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
 
-                short depthRange = (short) (rawDepth & 0x1FFF);
-                short depthConfidence = (short) ((rawDepth >> 13) & 0x7);
-                float confidencePercentage = depthConfidence == 0 ? 1.f : (depthConfidence - 1) / 7.f;
+    /**
+     * Convert YUV frame into RGB using opencv library
+     * Returned bytes: R(8) G(8) B(8) A(8)
+     * For ROS sensor_msgs/Image message
+     * @param yData
+     * @param uData
+     * @param vData
+     * @param yRowStride
+     * @param uvRowStride
+     * @param uvPixelStride
+     * @param width
+     * @param height
+     * @return byte array for each channel, each pixel takes 4 bytes,
+     */
+    public static native int[] convertYUVToARGBUint32(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
 
-                if(confidencePercentage > confidenceThreshold){
-                    res[index] = depthRange;
-                }else{
-                    res[index] = 0;
-                }
-            }
-        }
+    /**
+     * Convert YUV frame into RGBA
+     * Returned in ARGB(8888),
+     * For Android Bitmap rendering
+     * @param yData
+     * @param uData
+     * @param vData
+     * @param yRowStride
+     * @param uvRowStride
+     * @param uvPixelStride
+     * @param width
+     * @param height
+     * @return int array for ARGB(8888)
+     */
+    public static native byte[] convertYUVToARGB_opencv(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
 
-        return res;
-    }
+    /**
+     * Convert depth value in millimeter into grayscale image
+     * Returned in ARGB(8888)
+     * For Android Bitmap rendering
+     * @param shortDepthValues
+     * @param width
+     * @param height
+     * @param maxDepthThreshold
+     * @return int array,
+     */
+    public static native int[] convertShortToARGB(short[] shortDepthValues, int width, int height, short maxDepthThreshold);
 
-//    static public native short[] parseDepth16_native(ShortBuffer shortBuffer, int width, int height, float confidenceThreshold);
+    /**
+     * Normalize short(16bit) array to byte(8bit) according to max depth threshold
+     * @param shortData
+     * @return
+     */
+    public static native byte[] convertShortToGray(short[] shortData, int length, short maxDepthThreshold);
+
 
     public static short[] undistortion(short[] input, CameraParam camParam) {
 
@@ -147,7 +199,6 @@ public class CameraUtil {
 
     }
 
-//    public static native void undistortion();
 
     public static int[] undistortion(int[] input, CameraParam camParam) {
 
@@ -247,68 +298,11 @@ public class CameraUtil {
         return res;
     }
 
-
-    public static byte[] convertShortToGray(short[] depth, short maxDepthThreshold){
-
-        byte[] output = new byte[depth.length];
-
-        short max_measurement = 0;
-        for(int index=0; index<depth.length; index++){
-            short rawDepth = depth[index];
-            if(rawDepth > maxDepthThreshold) rawDepth = 0;
-            if(rawDepth > max_measurement) max_measurement = rawDepth;
-            if(rawDepth == 0){
-                output[index] = (byte) 0;
-            }else{
-                int normalized = rawDepth * 255 / maxDepthThreshold;
-                output[index] = (byte) normalized;
-            }
-        }
-
-        return output;
-    }
-
-    public static int[] convertShortToARGB(short[] shortDepthValues, short maxDepthThreshold) {
-
-        int[] output = new int[shortDepthValues.length];
-        assert shortDepthValues.length == output.length;
-
-        for(int index=0; index<shortDepthValues.length; index++){
-            short rawDepth = shortDepthValues[index];
-            if(rawDepth > maxDepthThreshold) rawDepth = 0;
-            int normalized = rawDepth * 255 / maxDepthThreshold;
-
-            int nR = 255 - normalized;
-            int nG = 255 - normalized;
-            int nB = 255 - normalized;
-
-            if(rawDepth != 0){
-                output[index] = 0xff000000 | (nR << 16) | (nG << 8) | nB;
-            }else{
-                output[index] = 0xff000000;
-            }
-        }
-
-        return output;
-    }
-
-    public static int[] convertGrayToARGB(byte[] gray){
-        int[] res = new int[gray.length];
-        for(int i = 0; i < gray.length; i++){
-            int grayValue = gray[i];
-            res[i] = 0xFF000000 | (grayValue << 16) | (grayValue << 8) | grayValue;
-        }
-        return res;
-    }
-
-
-    public static native byte[] convertYUVToARGB(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
-
-    public static native int[] convertYUVToARGBUint32(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
-
-    public static native byte[] convertYUVToARGB_opencv(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
-
-
+    /**
+     * Render Bitmap to surface
+     * @param bitmap
+     * @param view
+     */
     public static void renderBitmapToTextureview(Bitmap bitmap, TextureView view){
         Canvas canvas = view.lockCanvas();
         assert canvas != null;
@@ -316,13 +310,14 @@ public class CameraUtil {
         view.unlockCanvasAndPost(canvas);
     }
 
-
-//    public static byte[] shortToByte(short[] depthShort, CameraParam mCameraParam) {
-//
-//        byte[] res = new byte[depthShort]
-//
-//    }
-
+    /**
+     * Camera parameters
+     * Camera Intrinsics: fx, fy, cx, cy, s
+     * Camera Extrinsics, translation: tx, ty, tz
+     * Camera Extrinsics, rotation: qx, qy, qz, qw
+     * Lens Distortion: k1, k2, k3, p1, p2
+     * Scale Factor, adjust intrinsics according to output frame size
+     */
     static public class CameraParam{
 
         public float _scaleFactor;
@@ -403,8 +398,12 @@ public class CameraUtil {
             _s = intrinsics[4];
         }
 
-        public float[] getIntrinsics(){
-            return new float[] {_fx, _fy, _cx, _cy};
+        public double[] getIntrinsics(){
+            return new double[] {_fx, _fy, _cx, _cy};
+        }
+
+        public double[] getK(){
+            return new double[] {_fx, 0, _cx, 0, _fy, _cy, 0, 0, 1};
         }
 
         public void setExtrinsic(float tx, float ty, float tz, float qx, float qy, float qz, float qw){
@@ -465,8 +464,8 @@ public class CameraUtil {
             _p2 = distortion[4];
         }
 
-        public float[] getDistortionParam(){
-            return new float[] {_k1, _k2, _k3, _p1, _p2};
+        public double[] getDistortionParam(){
+            return new double[] {_k1, _k2, _p1, _p2, _k3};
         }
 
     }
