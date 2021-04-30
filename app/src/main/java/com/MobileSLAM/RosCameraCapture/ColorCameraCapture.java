@@ -82,7 +82,6 @@ public class ColorCameraCapture{
      */
     private byte[] latestFrame_jpeg;
 
-
     public static final String mCameraId = "0";             // Fixed camera id used for samsung s20+
     public static final String topicName = "/color";
     public static final CameraUtil.CameraParam mCameraParam = CameraUtil.colorCameraParam;
@@ -140,7 +139,7 @@ public class ColorCameraCapture{
 
         NodeConfiguration nodeConfiguration = NodeConfiguration.newPublic(mMainActivity.getRosHostname());
         nodeConfiguration.setMasterUri(mMainActivity.getMasterUri());
-        nodeConfiguration.setNodeName("~rgb");
+        nodeConfiguration.setNodeName("mobile_camera/rgb");
 
         nodeMainExecutor.execute(mCameraPublishNode, nodeConfiguration);
     }
@@ -178,21 +177,10 @@ public class ColorCameraCapture{
         return copyData;
     }
 
-    // Return frame in RGB arrays
-//    public byte[] getLatestFrame() throws InterruptedException{
-//        byte[] copyData;
-//        synchronized (frameLock){
-//            if(!hasNext){
-//                frameLock.wait();
-//            }
-//            copyData = Arrays.copyOf(latestFrame, latestFrame.length);
-//            hasNext = false;
-//        }
-//        return copyData;
-//    }
 
     /**
      * Callback for camera device state change
+     * Create capture session and build capture target
      */
     private CameraDevice.StateCallback colorCameraStateCallback = new CameraDevice.StateCallback(){
 
@@ -358,17 +346,17 @@ public class ColorCameraCapture{
         public void onStart(ConnectedNode connectedNode) {
 
             // Image publisher for raw YUV image
-            Publisher<sensor_msgs.Image> rawImagePublisher = connectedNode.newPublisher("~image_raw", sensor_msgs.Image._TYPE);
-            sensor_msgs.Image raw = connectedNode.getTopicMessageFactory().newFromType(sensor_msgs.Image._TYPE);
-            raw.setHeight(mCameraParam.frameHeight);
-            raw.setWidth(mCameraParam.frameWidth);
-            raw.setStep(mCameraParam.frameWidth * 4);
-            raw.setEncoding("rgba8");
-            raw.getHeader().setFrameId("rgb_raw");
-            raw.setIsBigendian((byte) 1);
+//            Publisher<sensor_msgs.Image> rawImagePublisher = connectedNode.newPublisher("~image_raw", sensor_msgs.Image._TYPE);
+//            sensor_msgs.Image raw = connectedNode.getTopicMessageFactory().newFromType(sensor_msgs.Image._TYPE);
+//            raw.setHeight(mCameraParam.frameHeight);
+//            raw.setWidth(mCameraParam.frameWidth);
+//            raw.setStep(mCameraParam.frameWidth * 4);
+//            raw.setEncoding("rgba8");
+//            raw.getHeader().setFrameId("rgb_raw");
+//            raw.setIsBigendian((byte) 1);
 
             // Image publisher for compressed JPEG image
-            Publisher<sensor_msgs.CompressedImage> compressedImagePublisher = connectedNode.newPublisher("~image_compressed", sensor_msgs.CompressedImage._TYPE);
+            Publisher<sensor_msgs.CompressedImage> compressedImagePublisher = connectedNode.newPublisher("~compressed", sensor_msgs.CompressedImage._TYPE);
             sensor_msgs.CompressedImage compressed = connectedNode.getTopicMessageFactory().newFromType(sensor_msgs.CompressedImage._TYPE);
             compressed.setFormat("jpeg");
             compressed.getHeader().setFrameId("rgb_compressed");
@@ -384,6 +372,9 @@ public class ColorCameraCapture{
             info.setDistortionModel("plumb_bob");
             info.setD(mCameraParam.getDistortionParam());
             info.setK(mCameraParam.getK());
+            info.setR(new double[] {1, 0, 0, 0, 1, 0, 0, 0, 1});
+            info.getRoi().setHeight(mCameraParam.frameHeight);
+            info.getRoi().setWidth(mCameraParam.frameWidth);
 
             connectedNode.executeCancellableLoop(new CancellableLoop() {
                 @Override
@@ -394,38 +385,20 @@ public class ColorCameraCapture{
                     if(imageEncoding == ImageFormat.YUV_420_888){
                         // Send raw image message
 
-                        try {
-                            byte[][] yuvBytes = getLatestFrame_yuv();
+//                        try {
+//                            byte[][] yuvBytes = getLatestFrame_yuv();
 //                            byte[] argbByte = CameraUtil.convertYUVToRGBA(yuvBytes[0], yuvBytes[1], yuvBytes[2],
 //                                    yRowStride, uvRowStride, uvPixelStride,
 //                                    mCameraParam.frameWidth, mCameraParam.frameHeight);
 //
 //                            dataStream.write(argbByte);
-
-                            int[] argbUint32 = CameraUtil.convertYUVToARGBUint32(yuvBytes[0], yuvBytes[1], yuvBytes[2],
-                                    yRowStride, uvRowStride, uvPixelStride,
-                                    mCameraParam.frameWidth, mCameraParam.frameHeight);
-
-                            Bitmap colorBitmap = Bitmap.createBitmap(mCameraParam.frameWidth, mCameraParam.frameHeight, Bitmap.Config.ARGB_8888);
-                            colorBitmap.setPixels(argbUint32, 0, mCameraParam.frameWidth, 0, 0, mCameraParam.frameWidth, mCameraParam.frameHeight);
-                            ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
-                            colorBitmap.compress(Bitmap.CompressFormat.JPEG, 10, byteOutputStream);
-
-                            dataStream.write(byteOutputStream.toByteArray());
-
-
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-
-                        compressed.getHeader().setStamp(timestamp);
-                        compressed.setData(dataStream.buffer().copy());
-                        compressedImagePublisher.publish(compressed);
-                        dataStream.buffer().clear();
-                        Log.d(TAG, topicName + ": Bitmap JPEG Image Sent; " + timestamp);
-
+//
+//                        } catch (IOException e) {
+//                            e.printStackTrace();
+//                        } catch (InterruptedException e) {
+//                            e.printStackTrace();
+//                        }
+//
 //                        raw.getHeader().setStamp(timestamp);
 //                        raw.setData(dataStream.buffer().copy());
 //                        rawImagePublisher.publish(raw);

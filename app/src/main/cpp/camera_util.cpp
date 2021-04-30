@@ -322,3 +322,32 @@ Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertShortToGray(JNIEnv *env, 
 
     return returnedArray;
 }
+
+
+extern "C"
+JNIEXPORT jbyteArray JNICALL
+Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertShortToUint16(JNIEnv *env, jclass clazz,
+                                                                     jshortArray short_data,
+                                                                     jint length) {
+
+    jshort* const shortBuff = env->GetShortArrayElements(short_data, JNI_FALSE);
+    uint16_t* const shortData = reinterpret_cast<uint16_t*>(shortBuff);
+
+    jbyteArray returnedArray = env->NewByteArray(length * 2);
+    jbyte* outData = env->GetByteArrayElements(returnedArray, NULL);
+
+
+    for(int i=0; i<length; i++){
+        uint16_t shortValue = shortData[i];
+        uint8_t right = ( shortValue >> 8 ) & 0xFF;
+        uint8_t left = shortValue & 0xFF;
+        outData[2*i] = left;
+        outData[2*i + 1] = right;
+    }
+
+    env->ReleaseShortArrayElements(short_data, shortBuff, JNI_ABORT);
+    env->ReleaseByteArrayElements(returnedArray, outData, JNI_ABORT);
+
+    return returnedArray;
+
+}

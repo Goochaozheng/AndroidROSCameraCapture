@@ -22,6 +22,7 @@ import android.support.annotation.RequiresApi;
 import android.util.Log;
 import android.view.TextureView;
 
+import org.apache.commons.lang.ArrayUtils;
 import org.jboss.netty.buffer.ChannelBufferOutputStream;
 import org.ros.android.RosActivity;
 import org.ros.concurrent.CancellableLoop;
@@ -58,18 +59,20 @@ public class DepthCameraCapture {
 
     private String mCameraId;
     private CameraManager mCameraManager;
-    private CameraDevice mCameraDevice;
-    private CaptureRequest mCaptureRequest;
     private CaptureRequest.Builder mCaptureRequestBuilder;
 
     private Object frameLock = new Object();
-    public boolean hasNext = false;
-    public byte[] latestFrame;
+    private boolean hasNext = false;
 
-    public float depthConfidenceThreshold = 0.1f;
-    public short maxDepthThreshold = 5000;            // Max Depth, in millimeter
+    private String imageEncoding = "mono16";
 
-    public String topicName = "/mobile_camera/depth";
+    private short[] latestFrame_short;
+    private byte[] latestFrame_gray;
+
+    private float depthConfidenceThreshold = 0.1f;
+    private short maxDepthThreshold = 5000;            // Max Depth, in millimeter
+
+    public String topicName = "/depth";
 
     public CameraUtil.CameraParam mCameraParam;
 
@@ -128,34 +131,54 @@ public class DepthCameraCapture {
 
         NodeConfiguration nodeConfiguration = NodeConfiguration.newPublic(mMainActivity.getRosHostname());
         nodeConfiguration.setMasterUri(mMainActivity.getMasterUri());
-        nodeConfiguration.setNodeName("~depth");
+        nodeConfiguration.setNodeName("mobile_camera/depth");
 
         nodeMainExecutor.execute(mCameraPublishNode, nodeConfiguration);
     }
 
 
-    // TODO get latest frame in byte[]
-    public byte[] getLatestFrame() throws InterruptedException {
+    /**
+     * Return depth in 8 bits gray, not real depth value
+     */
+    public byte[] getLatestFrame_gray() throws InterruptedException {
         byte[] copyData;
         synchronized (frameLock){
             if(!hasNext){
                 frameLock.wait();
             }
-            copyData = Arrays.copyOf(latestFrame, latestFrame.length);
+            copyData = Arrays.copyOf(latestFrame_gray, latestFrame_gray.length);
             hasNext = false;
         }
         return copyData;
     }
 
 
-    // Handle callback when camera state changes
+    /**
+     * Return depth in 16 bits value, in millimeter
+     */
+    public short[] getLatestFrame_short() throws InterruptedException {
+        short[] copyData;
+        synchronized (frameLock){
+            if(!hasNext){
+                frameLock.wait();
+            }
+            copyData = Arrays.copyOf(latestFrame_short, latestFrame_short.length);
+            hasNext = false;
+        }
+        return copyData;
+    }
+
+
+
+    /**
+     * Callback for camera device state change
+     * Create capture session and build capture target
+     */
     private CameraDevice.StateCallback depthCameraStateCallback = new CameraDevice.StateCallback() {
         @Override
         public void onOpened(@NonNull CameraDevice cameraDevice) {
             // start capture session as camera opened
             Log.i(TAG, "Camera " + cameraDevice.getId() + " Opened");
-
-            mCameraDevice = cameraDevice;
 
             // Configure image reader for image messaging
             mImageReader = ImageReader.newInstance(mCameraParam.frameWidth, mCameraParam.frameHeight, ImageFormat.DEPTH16, 2);
@@ -186,7 +209,10 @@ public class DepthCameraCapture {
     };
 
 
-    // handle callback when image reader state changes
+    /**
+     * Callback for image reader, handle incoming depth frame
+     * Parse DEPTH16 into real depth value and confidence
+     * */
     private ImageReader.OnImageAvailableListener depthImageAvailableListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader imageReader) {
@@ -196,28 +222,30 @@ public class DepthCameraCapture {
             ShortBuffer depthShortBuffer = img.getPlanes()[0].getBuffer().asShortBuffer();
             short[] depthRaw = new short[mCameraParam.frameWidth * mCameraParam.frameHeight];
             depthShortBuffer.get(depthRaw);
-//            depthRaw = Arrays.copyOf(depthShortBuffer.array(), depthShortBuffer.array().length);
             short[] depthShort = CameraUtil.parseDepth16(depthRaw, mCameraParam.frameWidth, mCameraParam.frameHeight, depthConfidenceThreshold);
+            byte[] depthGray = CameraUtil.convertShortToGray(depthShort, depthShort.length, maxDepthThreshold);
 
 //            depthShort = CameraUtil.undistortion(depthShort, mCameraParam);
 //            depthShort = CameraUtil.depthRectify(depthShort, mCameraParam, CameraUtil.colorCameraParam);
 
-            byte[] depthGray = CameraUtil.convertShortToGray(depthShort, depthShort.length, maxDepthThreshold);
-//            int[] depthARGB = CameraUtil.convertGrayToARGB(depthGray);
-
             int[] depthARGB = CameraUtil.convertShortToARGB(depthShort, mCameraParam.frameWidth, mCameraParam.frameHeight, maxDepthThreshold);
+
+            double depthMean = 0;
+            for(short depthValue : depthShort){
+                depthMean += depthValue;
+            }
+            depthMean = depthMean / depthShort.length;
+
+            Log.d(TAG, "Depth short mean: " + depthMean);
 
             Bitmap depthBitmap = Bitmap.createBitmap(mCameraParam.frameWidth, mCameraParam.frameHeight, Bitmap.Config.ARGB_8888);
             depthBitmap.setPixels(depthARGB, 0, mCameraParam.frameWidth, 0, 0, mCameraParam.frameWidth, mCameraParam.frameHeight);
             depthBitmap = Bitmap.createScaledBitmap(depthBitmap, mTextureView.getWidth(), mTextureView.getHeight(), false);
             CameraUtil.renderBitmapToTextureview(depthBitmap, mTextureView);
 
-            ByteBuffer depthByteBuffer = ByteBuffer.allocate(depthShort.length * 2);
-            depthByteBuffer.asShortBuffer().put(depthShort);
-            byte[] depthByte = Arrays.copyOf(depthByteBuffer.array(), depthByteBuffer.array().length);
-
             synchronized (frameLock){
-                latestFrame = depthGray;
+                latestFrame_gray = depthGray;
+                latestFrame_short = depthShort;
                 hasNext = true;
                 frameLock.notifyAll();
             }
@@ -226,7 +254,11 @@ public class DepthCameraCapture {
         }
     };
 
-    // handle callback when capture session state changes
+
+    /**
+     * Callback for capture session state change
+     * Create repeat capture request
+     */
     private CameraCaptureSession.StateCallback depthCameraCaptureSessionStateCallback = new CameraCaptureSession.StateCallback() {
         @Override
         public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
@@ -245,6 +277,11 @@ public class DepthCameraCapture {
     };
 
 
+    /**
+     * ROS node publishing depth message
+     * Read current frame as gray / uint16
+     * Send frame in sensor_msgs/Image (mono8 / mono16)
+     */
     private NodeMain mCameraPublishNode = new NodeMain() {
         @Override
         public GraphName getDefaultNodeName() {
@@ -253,8 +290,24 @@ public class DepthCameraCapture {
 
         @Override
         public void onStart(ConnectedNode connectedNode) {
-            Publisher<std_msgs.String> stringPublisher = connectedNode.newPublisher("~str", std_msgs.String._TYPE);
-            Publisher<sensor_msgs.Image> imagePublisher = connectedNode.newPublisher("~frame", sensor_msgs.Image._TYPE);
+
+            Publisher<sensor_msgs.Image> imagePublisher = connectedNode.newPublisher("~image", sensor_msgs.Image._TYPE);
+            sensor_msgs.Image img = connectedNode.getTopicMessageFactory().newFromType(sensor_msgs.Image._TYPE);
+            ChannelBufferOutputStream dataStream = new ChannelBufferOutputStream(MessageBuffers.dynamicBuffer());
+            img.setHeight(mCameraParam.frameHeight);
+            img.setWidth(mCameraParam.frameWidth);
+            img.getHeader().setFrameId(topicName);
+            img.setIsBigendian((byte) 0);
+
+            // Camera info publisher
+            Publisher<sensor_msgs.CameraInfo> infoPublisher = connectedNode.newPublisher("~camera_info", sensor_msgs.CameraInfo._TYPE);
+            sensor_msgs.CameraInfo info = infoPublisher.newMessage();
+            info.getHeader().setFrameId("color_camera");
+            info.setHeight(mCameraParam.frameHeight);
+            info.setWidth(mCameraParam.frameWidth);
+            info.setDistortionModel("plumb_bob");
+            info.setD(mCameraParam.getDistortionParam());
+            info.setK(mCameraParam.getK());
 
             connectedNode.executeCancellableLoop(new CancellableLoop() {
                 @Override
@@ -262,35 +315,42 @@ public class DepthCameraCapture {
 
                     Time timestamp = connectedNode.getCurrentTime();
 
-                    sensor_msgs.Image img = connectedNode.getTopicMessageFactory().newFromType(sensor_msgs.Image._TYPE);
-                    ChannelBufferOutputStream dataStream = new ChannelBufferOutputStream(MessageBuffers.dynamicBuffer());
-
                     try{
-                        dataStream.write(getLatestFrame());
+
+                        if(imageEncoding == "mono8"){
+                            // Send depth in 8bit gray
+                            img.setEncoding("8UC1");
+                            img.setStep(mCameraParam.frameWidth);
+                            dataStream.write(getLatestFrame_gray());
+
+                        }else if(imageEncoding == "mono16"){
+                            // Send depth in uint16
+                            short[] depthShort = getLatestFrame_short();
+//                            ByteBuffer depthByteBuffer = ByteBuffer.allocate(depthShort.length * 2);
+//                            depthByteBuffer.asShortBuffer().put(depthShort);
+//                            byte[] depthByte = Arrays.copyOf(depthByteBuffer.array(), depthByteBuffer.array().length);
+                            byte[] depthByte = CameraUtil.convertShortToUint16(depthShort, depthShort.length);
+
+                            img.setEncoding("16UC1");
+                            img.setStep(mCameraParam.frameWidth * 2);
+                            dataStream.write(depthByte);
+                        }
+
                     }catch (IOException e){
                         e.printStackTrace();
                     }catch (InterruptedException e){
                         e.printStackTrace();
                     }
 
-                    img.setHeight(mCameraParam.frameHeight);
-                    img.setWidth(mCameraParam.frameWidth);
-                    img.setStep(mCameraParam.frameWidth);
-                    img.setEncoding("mono8");
                     img.getHeader().setStamp(timestamp);
-                    img.getHeader().setFrameId(topicName);
-                    img.setIsBigendian((byte) 1);
                     img.setData(dataStream.buffer().copy());
-
-                    std_msgs.String msg = stringPublisher.newMessage();
-                    String meg_string = topicName + " " + timestamp + "\n";
-//                    meg_string += dataStream.buffer();
-                    msg.setData(meg_string);
-                    stringPublisher.publish(msg);
 
                     dataStream.buffer().clear();
                     imagePublisher.publish(img);
                     Log.d(TAG, topicName + ": Image sent; " + timestamp);
+
+                    info.getHeader().setStamp(timestamp);
+                    infoPublisher.publish(info);
 
                 }
             });

@@ -150,11 +150,20 @@ public class CameraUtil {
 
     /**
      * Normalize short(16bit) array to byte(8bit) according to max depth threshold
-     * @param shortData
+     * @param shortData short array
+     * @param length array size
+     * @param maxDepthThreshold maximum of measured depth, in millimeter
      * @return
      */
     public static native byte[] convertShortToGray(short[] shortData, int length, short maxDepthThreshold);
 
+    /**
+     * Convert Java short data into uint16 byte array
+     * @param shortData
+     * @param length
+     * @return
+     */
+    public static native byte[] convertShortToUint16(short[] shortData, int length);
 
     public static short[] undistortion(short[] input, CameraParam camParam) {
 
@@ -298,6 +307,28 @@ public class CameraUtil {
         return res;
     }
 
+
+    public static double[] convertQuatToMat(float[] quaternion){
+
+        if(quaternion.length != 4){
+            throw new IllegalArgumentException("Expect Array of 4");
+        }
+
+        double x = quaternion[0];
+        double y = quaternion[1];
+        double z = quaternion[2];
+        double w = quaternion[3];
+
+        double[] rotationMat = new double[] {
+            1 - 2*y*y - 2*z*z,  2*x*y - 2*z*w,      2*x*z + 2*y*w,
+            2*x*y + 2*z*w,      1 - 2*x*x - 2*z*z,  2*y*z - 2*x*w,
+            2*x*z - 2*y*w,      2*y*z + 2*x*w,      1 - 2*x*x - 2*y*y
+        };
+
+        return rotationMat;
+    }
+
+
     /**
      * Render Bitmap to surface
      * @param bitmap
@@ -438,9 +469,13 @@ public class CameraUtil {
             _qw = rotation[3];
         }
 
-        public float[] getExtrinsics(){
+        public float[] getTranslation(){
             return new float[] {_tx, _ty, _tz};
         }
+
+        public float[] getRotation() { return new float[] {_qx, _qy, _qz, _qw}; }
+
+        public double[] getR() { return convertQuatToMat(getRotation()); }
 
         public void setDistortionParam(float k1, float k2, float k3, float p1, float p2){
             _k1 = k1;
