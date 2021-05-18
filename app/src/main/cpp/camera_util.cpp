@@ -6,7 +6,7 @@
 
 extern "C"
 JNIEXPORT jbyteArray JNICALL
-Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUVToRGBA(JNIEnv *env, jclass clazz,
+Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUVToBGRA(JNIEnv *env, jclass clazz,
                                                                 jbyteArray y_data,
                                                                 jbyteArray u_data,
                                                                 jbyteArray v_data,
@@ -64,9 +64,9 @@ Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUVToRGBA(JNIEnv *env, jc
             nG = (nG >> 10) & 0xff;
             nB = (nB >> 10) & 0xff;
 
-            outData[index++] = nR & 0x000000ff;
-            outData[index++] = nG;
             outData[index++] = nB;
+            outData[index++] = nG;
+            outData[index++] = nR;
             outData[index++] = 0xff;
         }
     }
@@ -121,17 +121,26 @@ Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertYUVToARGB_1opencv(JNIEnv 
     cv::cvtColor(yuv, bgr, cv::COLOR_YUV2BGR);
 
     uint8_t* bgr_data = bgr.data;
+    int index = 0;
     for(int y=0; y<bgr.rows; y++){
         for(int x=0; x<bgr.cols; x++){
-            int index = y * width + x;
+//            int index = y * width + x;
             cv::Vec3b pixel = bgr.at<cv::Vec3b>(y,x);
             uint32_t B = pixel[0];
             uint32_t G = pixel[1];
             uint32_t R = pixel[2];
             if(bgr_data[index] == 0){
-                outData[index] = 0xFF000000;
+//                outData[index] = 0xFF000000;
+                outData[index++] = 0x00;
+                outData[index++] = 0x00;
+                outData[index++] = 0x00;
+                outData[index++] = 0xff;
             }else{
-                outData[index] = 0xFF000000 | (R << 16) | (G << 8) | B;
+//                outData[index] = 0xFF000000 | (R << 16) | (G << 8) | B;
+                outData[index++] = R & 0x000000ff;
+                outData[index++] = G;
+                outData[index++] = B;
+                outData[index++] = 0xff;
             }
         }
     }
@@ -326,7 +335,7 @@ Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertShortToGray(JNIEnv *env, 
 
 extern "C"
 JNIEXPORT jbyteArray JNICALL
-Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertShortToUint16(JNIEnv *env, jclass clazz,
+Java_com_MobileSLAM_RosCameraCapture_CameraUtil_convertShortToByte(JNIEnv *env, jclass clazz,
                                                                      jshortArray short_data,
                                                                      jint length) {
 

@@ -1,33 +1,36 @@
 package com.MobileSLAM.RosCameraCapture;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.RequiresApi;
 import android.util.Log;
+import android.util.Size;
 import android.view.Surface;
 import android.view.TextureView;
 
-import org.apache.commons.lang.ArrayUtils;
 import org.jboss.netty.buffer.ChannelBufferOutputStream;
 import org.ros.android.RosActivity;
 import org.ros.concurrent.CancellableLoop;
-import org.ros.internal.message.Message;
 import org.ros.internal.message.MessageBuffers;
 import org.ros.message.Time;
 import org.ros.namespace.GraphName;
@@ -43,11 +46,6 @@ import java.io.IOException;
 import java.lang.String;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Calendar;
-import java.util.Date;
-
-import sensor_msgs.CameraInfo;
-import std_msgs.*;
 
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 public class ColorCameraCapture{
@@ -56,34 +54,42 @@ public class ColorCameraCapture{
 
     private RosActivity mMainActivity;
     private TextureView mTextureView;
-    private ImageReader mImageReader;
+    private ImageReader imageReaderJPEG;
+    private ImageReader imageReaderYUV;
 
     private CameraManager mCameraManager;
     private CaptureRequest.Builder mCaptureRequestBuilder;
 
-    private int imageEncoding = ImageFormat.JPEG;
+//    private int imageEncoding = ImageFormat.JPEG;
 
-    private Object frameLock = new Object();
-    public boolean hasNext = false;
+    private Object frameLockJPEG = new Object();
+    private Object frameLockYUV = new Object();
+    public boolean hasNextJPEG = false;
+    public boolean hasNextYUV = false;
 
+    private HandlerThread backgroundThreadJPEG;
+    private Handler backgroundHandlerJPEG;
+
+    private HandlerThread backgroundThreadYUV;
+    private Handler backgroundHandlerYUV;
 
     /**
-     * frame stored in YUV format
+     * frame stored Low Resolution image in YUV format
      */
     private byte[] latestFrame_y;
     private byte[] latestFrame_u;
     private byte[] latestFrame_v;
-    private int yRowStride;
-    private int uvRowStride;
-    private int uvPixelStride;
+    private int yRowStride = -1;
+    private int uvRowStride = -1;
+    private int uvPixelStride = -1;
 
     /**
-     * frame stored in jpeg format
+     * frame stored High Resolution image in jpeg format
      */
-    private byte[] latestFrame_jpeg;
+    private Bitmap colorBitmapJPEG;
+    private byte[] latestFrameJPEG;
 
     public static final String mCameraId = "0";             // Fixed camera id used for samsung s20+
-    public static final String topicName = "/color";
     public static final CameraUtil.CameraParam mCameraParam = CameraUtil.colorCameraParam;
 
 
@@ -99,34 +105,78 @@ public class ColorCameraCapture{
         mTextureView = textureView;
     }
 
+    /**
+     * Start the background thread and handler
+     */
+    private void startBackgroundThread(){
+        backgroundThreadJPEG = new HandlerThread("ColorCameraBackground_HighResolution");
+        backgroundThreadJPEG.start();
+        backgroundHandlerJPEG = new Handler(backgroundThreadJPEG.getLooper());
+
+        backgroundThreadYUV = new HandlerThread("ColorCameraBackground_LowResolution");
+        backgroundThreadYUV.start();
+        backgroundHandlerYUV = new Handler(backgroundThreadYUV.getLooper());
+    }
+
+    /**
+     * Stop the background thread and handler
+     */
+    private void stopBackgroundThread(){
+        backgroundThreadJPEG.quitSafely();
+        backgroundThreadYUV.quitSafely();
+        try {
+            backgroundThreadJPEG.join();
+            backgroundThreadYUV.join();
+
+            backgroundThreadJPEG = null;
+            backgroundHandlerJPEG = null;
+
+            backgroundThreadYUV = null;
+            backgroundHandlerYUV = null;
+
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     /**
      * Start camera once the preview surface is ready
      */
     @SuppressLint("MissingPermission")
-    public void startCameraPreview(){
+    public void startCamera(){
 
-        mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-            @Override
-            public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
-                try {
-                    mCameraManager.openCamera(mCameraId, colorCameraStateCallback, null);
-                }catch (CameraAccessException e){
-                    e.printStackTrace();
+        startBackgroundThread();
+
+        if(mTextureView.isAvailable()){
+            try {
+                mCameraManager.openCamera(mCameraId, colorCameraStateCallback, backgroundHandlerJPEG);
+            }catch (CameraAccessException e){
+                e.printStackTrace();
+            }
+        }else{
+            mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+                @Override
+                public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
+                    try {
+                        mCameraManager.openCamera(mCameraId, colorCameraStateCallback, backgroundHandlerJPEG);
+                    }catch (CameraAccessException e){
+                        e.printStackTrace();
+                    }
                 }
-            }
 
-            @Override
-            public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) { }
+                @Override
+                public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) { }
 
-            @Override
-            public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
-                return false;
-            }
+                @Override
+                public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+                    return false;
+                }
 
-            @Override
-            public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) { }
-        });
+                @Override
+                public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) { }
+            });
+        }
 
     }
 
@@ -139,43 +189,68 @@ public class ColorCameraCapture{
 
         NodeConfiguration nodeConfiguration = NodeConfiguration.newPublic(mMainActivity.getRosHostname());
         nodeConfiguration.setMasterUri(mMainActivity.getMasterUri());
-        nodeConfiguration.setNodeName("mobile_camera/rgb");
+        nodeConfiguration.setNodeName("mobile_camera/rgb/hr");
+        nodeMainExecutor.execute(publishNodeCompressed, nodeConfiguration);
 
-        nodeMainExecutor.execute(mCameraPublishNode, nodeConfiguration);
+        NodeConfiguration nodeConfiguration_lr = NodeConfiguration.newPublic(mMainActivity.getRosHostname());
+        nodeConfiguration_lr.setMasterUri(mMainActivity.getMasterUri());
+        nodeConfiguration_lr.setNodeName("mobile_camera/rgb/lr");
+        nodeMainExecutor.execute(publishNodeImage, nodeConfiguration_lr);
     }
 
-    /**
-     * Return color frame in YUV bytes
-     */
-    public byte[][] getLatestFrame_yuv() throws InterruptedException {
 
-        byte[][] copyData = new byte[3][];
-        synchronized (frameLock){
-            if(!hasNext){
-                frameLock.wait();
+    /**
+     * Return YUV frame in BGRA8 bytes
+     */
+    public byte[] getLatestFrameYUV() throws InterruptedException {
+
+        byte[] copyData_y;
+        byte[] copyData_u;
+        byte[] copyData_v;
+
+        synchronized (frameLockYUV){
+            if(!hasNextYUV){
+                frameLockYUV.wait();
             }
-            copyData[0] = Arrays.copyOf(latestFrame_y, latestFrame_y.length);
-            copyData[1] = Arrays.copyOf(latestFrame_u, latestFrame_u.length);
-            copyData[2] = Arrays.copyOf(latestFrame_v, latestFrame_v.length);
-            hasNext = false;
+            copyData_y = Arrays.copyOf(latestFrame_y, latestFrame_y.length);
+            copyData_u = Arrays.copyOf(latestFrame_u, latestFrame_u.length);
+            copyData_v = Arrays.copyOf(latestFrame_v, latestFrame_v.length);
+
+            hasNextYUV = false;
         }
-        return copyData;
+
+        byte[] bgr8Data = CameraUtil.convertYUVToBGRA(copyData_y, copyData_u, copyData_v,
+                yRowStride, uvRowStride, uvPixelStride,
+                320, 240);
+
+        return bgr8Data;
     }
 
     /**
      * Return color frame in JPEG encoding bytes
      */
-    public byte[] getLatestFrame_jpeg() throws InterruptedException{
+    public byte[] getLatestFrameJPEG() throws InterruptedException{
         byte[] copyData;
-        synchronized (frameLock){
-            if(!hasNext){
-                frameLock.wait();
+
+        synchronized (frameLockJPEG){
+            if(!hasNextJPEG){
+                frameLockJPEG.wait();
             }
-            copyData = Arrays.copyOf(latestFrame_jpeg, latestFrame_jpeg.length);
-            hasNext = false;
+            copyData = Arrays.copyOf(latestFrameJPEG, latestFrameJPEG.length);
+            hasNextJPEG = false;
         }
-        return copyData;
+
+        colorBitmapJPEG = BitmapFactory.decodeByteArray(copyData, 0, copyData.length);
+        colorBitmapJPEG = Bitmap.createScaledBitmap(colorBitmapJPEG, mCameraParam.frameWidth, mCameraParam.frameHeight, false);
+
+        // Compress Bitmap to JPEG for publishing
+        ByteArrayOutputStream jpegStream = new ByteArrayOutputStream();
+        colorBitmapJPEG.compress(Bitmap.CompressFormat.JPEG, 80, jpegStream);
+        byte[] jpegData = jpegStream.toByteArray();
+
+        return jpegData;
     }
+
 
 
     /**
@@ -186,7 +261,18 @@ public class ColorCameraCapture{
 
         @Override
         public void onOpened(@NonNull CameraDevice cameraDevice) {
+
+            Log.d(TAG, "Camera Thread: " + String.valueOf(Thread.currentThread().getId()));
+
             Log.i(TAG, "Camera " + cameraDevice.getId() + " Opened");
+
+            try {
+                CameraCharacteristics chara = mCameraManager.getCameraCharacteristics(mCameraId);
+                StreamConfigurationMap configs = chara.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                configs.getOutputSizes(ImageFormat.JPEG);
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
 
             // Set Texture Transform for Landscape Orientation
             Matrix matrix = new Matrix();
@@ -199,22 +285,28 @@ public class ColorCameraCapture{
 
             // Surface Texture for Preview
             SurfaceTexture colorSurfaceTexture = mTextureView.getSurfaceTexture();
-            colorSurfaceTexture.setDefaultBufferSize(mCameraParam.frameWidth, mCameraParam.frameHeight);
+            colorSurfaceTexture.setDefaultBufferSize(mTextureView.getWidth(), mTextureView.getHeight());
             Surface previewSurface = new Surface(colorSurfaceTexture);
 
             // Configure image reader for image messaging
-            mImageReader = ImageReader.newInstance(mCameraParam.frameWidth, mCameraParam.frameHeight, imageEncoding, 2);
-            mImageReader.setOnImageAvailableListener(colorImageAvailableListener, null);
+            // ImageReader reads frame with full size:
+            imageReaderJPEG = ImageReader.newInstance(4032, 3024, ImageFormat.JPEG, 2);
+            imageReaderJPEG.setOnImageAvailableListener(colorImageAvailableListenerJPEG, backgroundHandlerJPEG);
+            // ImageReader reads frame with low resolution:
+            imageReaderYUV = ImageReader.newInstance(mCameraParam.frameWidth, mCameraParam.frameHeight, ImageFormat.YUV_420_888, 2);
+            imageReaderYUV.setOnImageAvailableListener(colorImageAvailableListenerYUV, backgroundHandlerYUV);
 
             // Configure capture request
             try{
                 mCaptureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                 mCaptureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+                mCaptureRequestBuilder.set(CaptureRequest.JPEG_THUMBNAIL_SIZE, new Size(0,0));
                 mCaptureRequestBuilder.addTarget(previewSurface);
-                mCaptureRequestBuilder.addTarget(mImageReader.getSurface());
+                mCaptureRequestBuilder.addTarget(imageReaderJPEG.getSurface());
+                mCaptureRequestBuilder.addTarget(imageReaderYUV.getSurface());
 
                 // create capture session
-                cameraDevice.createCaptureSession(Arrays.asList(previewSurface, mImageReader.getSurface()), colorCameraCaptureSessionStateCallback, null);
+                cameraDevice.createCaptureSession(Arrays.asList(previewSurface, imageReaderJPEG.getSurface(), imageReaderYUV.getSurface()), colorCameraCaptureSessionStateCallback, null);
 
             } catch (CameraAccessException e){
                 e.printStackTrace();
@@ -236,75 +328,64 @@ public class ColorCameraCapture{
 
 
     /**
-     * Callback for image reader, handle incoming color frame
-     * Convert parse YUV Image and store current frame
+     * ImageReader callback for JPEG frame
+     * Store latest frame to 'latestFrameJPEG'
      * */
-    private ImageReader.OnImageAvailableListener colorImageAvailableListener = new ImageReader.OnImageAvailableListener() {
+    final private ImageReader.OnImageAvailableListener colorImageAvailableListenerJPEG = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader imageReader) {
-
-            Long t1 = System.nanoTime();
 
             Image img = imageReader.acquireLatestImage();
             if(img == null) return;
 
-            if(img.getFormat() == ImageFormat.JPEG) {
-                // Handle JPEG compressed image
+            ByteBuffer buffer = img.getPlanes()[0].getBuffer();
+            byte[] jpegByte = new byte[buffer.capacity()];
+            buffer.get(jpegByte);
 
-                ByteBuffer buffer = img.getPlanes()[0].getBuffer();
-                byte[] jpegByte = new byte[buffer.capacity()];
-                buffer.get(jpegByte);
-
-                synchronized (frameLock){
-                    latestFrame_jpeg = jpegByte;
-                    hasNext = true;
-                    frameLock.notifyAll();
-                }
-
-            } else if(img.getFormat() == ImageFormat.YUV_420_888){
-                // Handle raw YUV image
-
-                Image.Plane[] planes = img.getPlanes();
-                byte[][] yuvBytes = new byte[planes.length][];
-                for(int i = 0; i < planes.length; i++){
-                    yuvBytes[i] = new byte[planes[i].getBuffer().capacity()];
-                    planes[i].getBuffer().get(yuvBytes[i]);
-                }
-
-                yRowStride = planes[0].getRowStride();
-                uvRowStride = planes[1].getRowStride();
-                uvPixelStride = planes[1].getPixelStride();
-
-//                int[] argbUint32 = CameraUtil.convertByteToUint32(argbByte, mCameraParam.frameWidth, mCameraParam.frameHeight, 4);
-//
-//                int[] argbUint32 = CameraUtil.convertYUVToARGBUint32(yuvBytes[0], yuvBytes[1], yuvBytes[2],
-//                                            yRowStride, uvRowStride, uvPixelStride,
-//                                            mCameraParam.frameWidth, mCameraParam.frameHeight);
-//
-//                Bitmap colorBitmap = Bitmap.createBitmap(mCameraParam.frameWidth, mCameraParam.frameHeight, Bitmap.Config.ARGB_8888);
-//                colorBitmap.setPixels(argbUint32, 0, mCameraParam.frameWidth, 0, 0, mCameraParam.frameWidth, mCameraParam.frameHeight);
-//                colorBitmap = Bitmap.createScaledBitmap(colorBitmap, mTextureView.getWidth(), mTextureView.getHeight(), false);
-//                CameraUtil.renderBitmapToTextureview(colorBitmap, mTextureView);
-
-                synchronized (frameLock){
-
-                    latestFrame_y = yuvBytes[0];
-                    latestFrame_u = yuvBytes[1];
-                    latestFrame_v = yuvBytes[2];
-
-                    hasNext = true;
-                    frameLock.notifyAll();
-                }
-
-            } else {
-                Log.e(TAG, "Unsupported Image Format");
-                return;
+            synchronized (frameLockJPEG){
+                latestFrameJPEG = jpegByte;
+                hasNextJPEG = true;
+                frameLockJPEG.notifyAll();
             }
 
             img.close();
+        }
+    };
 
-            Long t2 = System.nanoTime();
-            Log.d("Timing", "Image Reader Process Time: " + String.valueOf((float)(t2 - t1) / 1000000000));
+
+    /**
+     * ImageReader callback for YUV frame
+     * Store latest frame to latestFrame_y & latestFrame_u & latestFrame_v
+     * yRowStride, uvRowStride, uvPixelStride are also set
+     */
+    final private ImageReader.OnImageAvailableListener colorImageAvailableListenerYUV = new ImageReader.OnImageAvailableListener() {
+        @Override
+        public void onImageAvailable(ImageReader imageReader) {
+            Image img = imageReader.acquireLatestImage();
+            if(img == null) return;
+
+            Image.Plane[] planes = img.getPlanes();
+            byte[][] yuvBytes = new byte[planes.length][];
+            for(int i = 0; i < planes.length; i++){
+                yuvBytes[i] = new byte[planes[i].getBuffer().capacity()];
+                planes[i].getBuffer().get(yuvBytes[i]);
+            }
+
+            if(yRowStride == -1){
+                yRowStride = planes[0].getRowStride();
+                uvRowStride = planes[1].getRowStride();
+                uvPixelStride = planes[1].getPixelStride();
+            }
+
+            synchronized (frameLockYUV){
+                latestFrame_y = yuvBytes[0];
+                latestFrame_u = yuvBytes[1];
+                latestFrame_v = yuvBytes[2];
+                hasNextYUV = true;
+                frameLockYUV.notifyAll();
+            }
+
+            img.close();
         }
     };
 
@@ -318,7 +399,7 @@ public class ColorCameraCapture{
         public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
             try{
                 CaptureRequest captureRequest = mCaptureRequestBuilder.build();
-                cameraCaptureSession.setRepeatingRequest(captureRequest, null, null);
+                cameraCaptureSession.setRepeatingRequest(captureRequest, null, backgroundHandlerJPEG);
             } catch (CameraAccessException e){
                 e.printStackTrace();
             }
@@ -333,10 +414,11 @@ public class ColorCameraCapture{
 
     /**
      * ROS node publishing image message
-     * Read current frame and parse YUV into RGB
-     * Send frame in sensor_msgs/Image (rgba8)
+     * Read high resolution frame (4032x3024)
+     * Resize to 2560x1920
+     * Send frame in sensor_msgs/CompressedImage (jpeg)
      */
-    private NodeMain mCameraPublishNode = new NodeMain() {
+    private NodeMain publishNodeCompressed = new NodeMain() {
         @Override
         public GraphName getDefaultNodeName() {
             return GraphName.of("color");
@@ -345,28 +427,87 @@ public class ColorCameraCapture{
         @Override
         public void onStart(ConnectedNode connectedNode) {
 
-            // Image publisher for raw YUV image
-//            Publisher<sensor_msgs.Image> rawImagePublisher = connectedNode.newPublisher("~image_raw", sensor_msgs.Image._TYPE);
-//            sensor_msgs.Image raw = connectedNode.getTopicMessageFactory().newFromType(sensor_msgs.Image._TYPE);
-//            raw.setHeight(mCameraParam.frameHeight);
-//            raw.setWidth(mCameraParam.frameWidth);
-//            raw.setStep(mCameraParam.frameWidth * 4);
-//            raw.setEncoding("rgba8");
-//            raw.getHeader().setFrameId("rgb_raw");
-//            raw.setIsBigendian((byte) 1);
+            Log.d(TAG, "Image Publishing Thread: " + String.valueOf(Thread.currentThread().getId()));
 
             // Image publisher for compressed JPEG image
             Publisher<sensor_msgs.CompressedImage> compressedImagePublisher = connectedNode.newPublisher("~compressed", sensor_msgs.CompressedImage._TYPE);
             sensor_msgs.CompressedImage compressed = connectedNode.getTopicMessageFactory().newFromType(sensor_msgs.CompressedImage._TYPE);
             compressed.setFormat("jpeg");
-            compressed.getHeader().setFrameId("rgb_compressed");
+            compressed.getHeader().setFrameId("camera_link");
+
+            ChannelBufferOutputStream dataStream = new ChannelBufferOutputStream(MessageBuffers.dynamicBuffer());
+
+            connectedNode.executeCancellableLoop(new CancellableLoop() {
+                @Override
+                protected void loop() {
+                    // Send compressed image message
+                    Time timestamp = connectedNode.getCurrentTime();
+
+                    try{
+                        byte[] jpegByte = getLatestFrameJPEG();
+                        dataStream.write(jpegByte);
+                    } catch (IOException e){
+                        e.printStackTrace();
+                    } catch (InterruptedException e){
+                        e.printStackTrace();
+                    }
+
+                    compressed.getHeader().setStamp(timestamp);
+                    compressed.setData(dataStream.buffer().copy());
+                    compressedImagePublisher.publish(compressed);
+                    dataStream.buffer().clear();
+
+                }
+
+            });
+        }
+
+        @Override
+        public void onShutdown(Node node) {
+
+        }
+
+        @Override
+        public void onShutdownComplete(Node node) {
+
+        }
+
+        @Override
+        public void onError(Node node, Throwable throwable) {
+
+        }
+    };
+
+    /**
+     * ROS node publishing Low Resolution image (320x240)
+     */
+    private NodeMain publishNodeImage = new NodeMain() {
+        @Override
+        public GraphName getDefaultNodeName() {
+            return null;
+        }
+
+        @Override
+        public void onStart(ConnectedNode connectedNode) {
+
+            Log.d(TAG, "LR Image Publishing Thread: " + String.valueOf(Thread.currentThread().getId()));
+
+            // Image publisher for compressed BGRA8 image
+            Publisher<sensor_msgs.Image> lrImagePublisher = connectedNode.newPublisher("~image", sensor_msgs.Image._TYPE);
+            sensor_msgs.Image img = connectedNode.getTopicMessageFactory().newFromType(sensor_msgs.Image._TYPE);
+            img.setEncoding("bgra8");
+            img.setWidth(mCameraParam.frameWidth);
+            img.setHeight(mCameraParam.frameHeight);
+            img.setStep(mCameraParam.frameWidth * 4);
+            img.setIsBigendian((byte)1);
+            img.getHeader().setFrameId("camera_link");
 
             ChannelBufferOutputStream dataStream = new ChannelBufferOutputStream(MessageBuffers.dynamicBuffer());
 
             // Camera info publisher
             Publisher<sensor_msgs.CameraInfo> infoPublisher = connectedNode.newPublisher("~camera_info", sensor_msgs.CameraInfo._TYPE);
             sensor_msgs.CameraInfo info = infoPublisher.newMessage();
-            info.getHeader().setFrameId("color_camera");
+            info.getHeader().setFrameId("mobile_camera");
             info.setHeight(mCameraParam.frameHeight);
             info.setWidth(mCameraParam.frameWidth);
             info.setDistortionModel("plumb_bob");
@@ -375,61 +516,33 @@ public class ColorCameraCapture{
             info.setR(new double[] {1, 0, 0, 0, 1, 0, 0, 0, 1});
             info.getRoi().setHeight(mCameraParam.frameHeight);
             info.getRoi().setWidth(mCameraParam.frameWidth);
+            info.setP(mCameraParam.getP());
 
             connectedNode.executeCancellableLoop(new CancellableLoop() {
                 @Override
                 protected void loop() {
-
+                    // Send compressed image message
                     Time timestamp = connectedNode.getCurrentTime();
-
-                    if(imageEncoding == ImageFormat.YUV_420_888){
-                        // Send raw image message
-
-//                        try {
-//                            byte[][] yuvBytes = getLatestFrame_yuv();
-//                            byte[] argbByte = CameraUtil.convertYUVToRGBA(yuvBytes[0], yuvBytes[1], yuvBytes[2],
-//                                    yRowStride, uvRowStride, uvPixelStride,
-//                                    mCameraParam.frameWidth, mCameraParam.frameHeight);
-//
-//                            dataStream.write(argbByte);
-//
-//                        } catch (IOException e) {
-//                            e.printStackTrace();
-//                        } catch (InterruptedException e) {
-//                            e.printStackTrace();
-//                        }
-//
-//                        raw.getHeader().setStamp(timestamp);
-//                        raw.setData(dataStream.buffer().copy());
-//                        rawImagePublisher.publish(raw);
-//                        dataStream.buffer().clear();
-//                        Log.d(TAG, topicName + ": Raw Image Sent; " + timestamp);
-
-                    }else if(imageEncoding == ImageFormat.JPEG){
-                        // Send compressed image message
-
-                        try{
-                            byte[] jpegByte = getLatestFrame_jpeg();
-                            dataStream.write(jpegByte);
-                        } catch (IOException e){
-                            e.printStackTrace();
-                        } catch (InterruptedException e){
-                            e.printStackTrace();
-                        }
-
-                        compressed.getHeader().setStamp(timestamp);
-                        compressed.setData(dataStream.buffer().copy());
-                        compressedImagePublisher.publish(compressed);
-                        dataStream.buffer().clear();
-                        Log.d(TAG, topicName + ": JPEG Image Sent; " + timestamp);
-
+                    try{
+                        byte[] rgb8Byte = getLatestFrameYUV();
+                        dataStream.write(rgb8Byte);
+                    } catch (IOException e){
+                        e.printStackTrace();
+                    } catch (InterruptedException e){
+                        e.printStackTrace();
                     }
+
+                    img.getHeader().setStamp(timestamp);
+                    img.setData(dataStream.buffer().copy());
+                    lrImagePublisher.publish(img);
+                    dataStream.buffer().clear();
 
                     info.getHeader().setStamp(timestamp);
                     infoPublisher.publish(info);
-                }
 
+                }
             });
+
         }
 
         @Override

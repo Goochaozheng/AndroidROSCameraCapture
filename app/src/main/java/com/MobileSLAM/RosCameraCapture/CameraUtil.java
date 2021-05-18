@@ -17,7 +17,8 @@ public class CameraUtil {
             new Size(1440, 1080),   // 1, scale factor: 0.3571
             new Size(960, 720),     // 2, scale factor: 0.2381
             new Size(640, 480),     // 3, scale factor: 0.1587
-            new Size(320, 240)      // 4, scale factor: 0.0794
+            new Size(320, 240),     // 4, scale factor: 0.0794
+            new Size(2560, 1920),   // 5, scale factor: 0.6349
     };
 
     static final Size[] DEPTH_OUTPUT_SIZES = new Size[] {
@@ -29,52 +30,52 @@ public class CameraUtil {
             // frame size
             DEPTH_OUTPUT_SIZES[1].getWidth(),
             DEPTH_OUTPUT_SIZES[1].getHeight(),
-            0.5f,
+            0.5,
             // intrinsics
-            536.9581f,
-            536.7106f,
-            312.9077f,
-            233.22255f,
-            0f,
+            536.9581,
+            536.7106,
+            312.9077,
+            233.22255,
+            0,
             // extrinsics
-            -0.011234f,
-            0f,
-            0f,
-            0.70304f,
-            -0.71113f,
-            0.00172f,
+            -0.011234,
+            0,
+            0,
+            0.70304,
+            -0.71113,
+            0.00172,
             0,
             // distortion
-            0.32826f,
-            -0.56677f,
-            0.12383f,
+            0.32826,
+            -0.56677,
+            0.12383,
             0,
             0
     );
 
     static public CameraParam colorCameraParam = new CameraParam(
             // frame size
-            COLOR_OUTPUT_SIZES[1].getWidth(),
-            COLOR_OUTPUT_SIZES[1].getHeight(),
-            0.3571f,
+            COLOR_OUTPUT_SIZES[4].getWidth(),
+            COLOR_OUTPUT_SIZES[4].getHeight(),
+            0.0794,
             // intrinsics
-            3054.3071f,
-            3052.0754f,
-            1990.2135f,
-            1512.378f,
-            0f,
+            3054.3071,
+            3052.0754,
+            1990.2135,
+            1512.378,
+            0,
             // extrinsics
-            0f,
-            0f,
-            0f,
-            0.7071f,
-            -0.7071f,
-            0f,
-            0f,
+            0,
+            0,
+            0,
+            0.7071,
+            -0.7071,
+            0,
+            0,
             // distortion
-            0.05797f,
-            -0.05520f,
-            0.00144f,
+            0.05797,
+            -0.05520,
+            0.00144,
             0,
             0
     );
@@ -102,23 +103,8 @@ public class CameraUtil {
      * @param height
      * @return byte array for each channel, each pixel takes 4 bytes, R G B A respectively.
      */
-    public static native byte[] convertYUVToRGBA(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
+    public static native byte[] convertYUVToBGRA(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
 
-    /**
-     * Convert YUV frame into RGB using opencv library
-     * Returned bytes: R(8) G(8) B(8) A(8)
-     * For ROS sensor_msgs/Image message
-     * @param yData
-     * @param uData
-     * @param vData
-     * @param yRowStride
-     * @param uvRowStride
-     * @param uvPixelStride
-     * @param width
-     * @param height
-     * @return byte array for each channel, each pixel takes 4 bytes,
-     */
-    public static native int[] convertYUVToARGBUint32(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
 
     /**
      * Convert YUV frame into RGBA
@@ -133,6 +119,22 @@ public class CameraUtil {
      * @param width
      * @param height
      * @return int array for ARGB(8888)
+     */
+    public static native int[] convertYUVToARGBUint32(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
+
+    /**
+     * Convert YUV frame into RGB using opencv library
+     * Returned bytes: R(8) G(8) B(8) A(8)
+     * For ROS sensor_msgs/Image message
+     * @param yData
+     * @param uData
+     * @param vData
+     * @param yRowStride
+     * @param uvRowStride
+     * @param uvPixelStride
+     * @param width
+     * @param height
+     * @return byte array for each channel, each pixel takes 4 bytes,
      */
     public static native byte[] convertYUVToARGB_opencv(byte[] yData, byte[] uData, byte[] vData, int yRowStride, int uvRowStride, int uvPixelStride, int width, int height);
 
@@ -163,19 +165,19 @@ public class CameraUtil {
      * @param length
      * @return
      */
-    public static native byte[] convertShortToUint16(short[] shortData, int length);
+    public static native byte[] convertShortToByte(short[] shortData, int length);
 
     public static short[] undistortion(short[] input, CameraParam camParam) {
 
-        float fx = camParam._fx;
-        float fy = camParam._fy;
-        float cx = camParam._cx;
-        float cy = camParam._cy;
-        float k1 = camParam._k1;
-        float k2 = camParam._k2;
-        float k3 = camParam._k3;
-        float p1 = camParam._p1;
-        float p2 = camParam._p2;
+        double fx = camParam._fx;
+        double fy = camParam._fy;
+        double cx = camParam._cx;
+        double cy = camParam._cy;
+        double k1 = camParam._k1;
+        double k2 = camParam._k2;
+        double k3 = camParam._k3;
+        double p1 = camParam._p1;
+        double p2 = camParam._p2;
 
         int width = camParam.frameWidth;
         int height = camParam.frameHeight;
@@ -211,15 +213,15 @@ public class CameraUtil {
 
     public static int[] undistortion(int[] input, CameraParam camParam) {
 
-        float fx = camParam._fx;
-        float fy = camParam._fy;
-        float cx = camParam._cx;
-        float cy = camParam._cy;
-        float k1 = camParam._k1;
-        float k2 = camParam._k2;
-        float k3 = camParam._k3;
-        float p1 = camParam._p1;
-        float p2 = camParam._p2;
+        double fx = camParam._fx;
+        double fy = camParam._fy;
+        double cx = camParam._cx;
+        double cy = camParam._cy;
+        double k1 = camParam._k1;
+        double k2 = camParam._k2;
+        double k3 = camParam._k3;
+        double p1 = camParam._p1;
+        double p2 = camParam._p2;
 
         int width = camParam.frameWidth;
         int height = camParam.frameHeight;
@@ -250,24 +252,24 @@ public class CameraUtil {
     }
 
 
-    public static short[] depthRectify(short[] depth, CameraParam depthParam, CameraParam colorParam){
+    public static short[] depthRegister(short[] depth, CameraParam depthParam, CameraParam colorParam){
 
         int width = depthParam.frameWidth;
         int height = depthParam.frameHeight;
 
-        float qx = depthParam._qx;
-        float qy = depthParam._qy;
-        float qz = depthParam._qz;
-        float qw = depthParam._qw;
+        double qx = depthParam._qx;
+        double qy = depthParam._qy;
+        double qz = depthParam._qz;
+        double qw = depthParam._qw;
 
-        float tx = depthParam._tx;
-        float ty = depthParam._ty;
-        float tz = depthParam._tz;
+        double tx = depthParam._tx;
+        double ty = depthParam._ty;
+        double tz = depthParam._tz;
 
-        float qx_2 = colorParam._qx;
-        float qy_2 = colorParam._qy;
-        float qz_2 = colorParam._qz;
-        float qw_2 = colorParam._qw;
+        double qx_2 = colorParam._qx;
+        double qy_2 = colorParam._qy;
+        double qz_2 = colorParam._qz;
+        double qw_2 = colorParam._qw;
 
         short[] res = new short[width * height];
         for (int i = 0; i < width * height; i++) res[i] = 0;
@@ -276,27 +278,27 @@ public class CameraUtil {
             for(int u = 0; u < width; u++){
 
                 // 3d point of depth pixel at phone coordinate, in meter
-                float depth_z = depth[ v * width + u ] / 1000.0f;
+                double depth_z = depth[ v * width + u ] / 1000.0f;
                 if(depth_z == 0) continue;
 
                 // depth image to depth camera
-                float depth_x = (u - depthParam._cx) / depthParam._fx * depth_z;
-                float depth_y = (v - depthParam._cy) / depthParam._fy * depth_z;
+                double depth_x = (u - depthParam._cx) / depthParam._fx * depth_z;
+                double depth_y = (v - depthParam._cy) / depthParam._fy * depth_z;
 
                 // transform 3d point to sensor coordinate
-                float color_x = depth_x*(1-2*qy*qy-2*qz*qz) + depth_y*(2*qx*qy+2*qz*qw) + depth_z*(2*qx*qz-2*qy*qw) + tx;
-                float color_y = depth_x*(2*qx*qy-2*qz*qw) + depth_y*(1-2*qx*qx-2*qz*qz) + depth_z*(2*qy*qz+2*qx*qw) + ty;
-                float color_z = depth_x*(2*qx*qz+2*qy*qw) + depth_y*(2*qy*qz-2*qx*qw) + depth_z*(1-2*qx*qx-2*qy*qy) + tz;
+                double color_x = depth_x*(1-2*qy*qy-2*qz*qz) + depth_y*(2*qx*qy+2*qz*qw) + depth_z*(2*qx*qz-2*qy*qw) + tx;
+                double color_y = depth_x*(2*qx*qy-2*qz*qw) + depth_y*(1-2*qx*qx-2*qz*qz) + depth_z*(2*qy*qz+2*qx*qw) + ty;
+                double color_z = depth_x*(2*qx*qz+2*qy*qw) + depth_y*(2*qy*qz-2*qx*qw) + depth_z*(1-2*qx*qx-2*qy*qy) + tz;
 
                 // transform from sensor coordinate to color camera coordinate
-                float color_x_2 = color_x*(1-2*qy_2*qy_2-2*qz_2*qz_2) + color_y*(2*qx_2*qy_2+2*qz_2*qw_2) + color_z*(2*qx_2*qz_2-2*qy_2*qw_2);
-                float color_y_2 = color_x*(2*qx_2*qy_2-2*qz_2*qw_2) + color_y*(1-2*qx_2*qx_2-2*qz_2*qz_2) + color_z*(2*qy_2*qz_2+2*qx_2*qw_2);
-                float color_z_2 = color_x*(2*qx_2*qz_2+2*qy_2*qw_2) + color_y*(2*qy_2*qz_2-2*qx_2*qw_2) + color_z*(1-2*qx_2*qx_2-2*qy_2*qy_2);
+                double color_x_2 = color_x*(1-2*qy_2*qy_2-2*qz_2*qz_2) + color_y*(2*qx_2*qy_2+2*qz_2*qw_2) + color_z*(2*qx_2*qz_2-2*qy_2*qw_2);
+                double color_y_2 = color_x*(2*qx_2*qy_2-2*qz_2*qw_2) + color_y*(1-2*qx_2*qx_2-2*qz_2*qz_2) + color_z*(2*qy_2*qz_2+2*qx_2*qw_2);
+                double color_z_2 = color_x*(2*qx_2*qz_2+2*qy_2*qw_2) + color_y*(2*qy_2*qz_2-2*qx_2*qw_2) + color_z*(1-2*qx_2*qx_2-2*qy_2*qy_2);
 
                 // color camera to color image
                 // using intrinsics of color camera under 320x240 resolution
-                float color_u = 242.3898f * color_x_2 / color_z_2 + 157.9433f;
-                float color_v = 242.2127f * color_y_2 / color_z_2 + 120.0223f;
+                double color_u = 242.3898f * color_x_2 / color_z_2 + 157.9433f;
+                double color_v = 242.2127f * color_y_2 / color_z_2 + 120.0223f;
 
                 // assign depth value to new pixel
                 if(color_u >= 0 && color_v >=0 && color_u <= width && color_v <= height){
@@ -308,7 +310,7 @@ public class CameraUtil {
     }
 
 
-    public static double[] convertQuatToMat(float[] quaternion){
+    public static double[] convertQuatToMat(double[] quaternion){
 
         if(quaternion.length != 4){
             throw new IllegalArgumentException("Expect Array of 4");
@@ -351,43 +353,43 @@ public class CameraUtil {
      */
     static public class CameraParam{
 
-        public float _scaleFactor;
+        public double _scaleFactor;
         public int frameWidth;
         public int frameHeight;
 
         // Camera Intrinsics
-        public float _fx;
-        public float _fy;
-        public float _cx;
-        public float _cy;
-        public float _s;
+        public double _fx;
+        public double _fy;
+        public double _cx;
+        public double _cy;
+        public double _s;
 
         // Camera Extrinsics, sensor coordinate
-        public float _tx;   // horizontal points to right
-        public float _ty;   // vertical points up
-        public float _tz;   // towards outside of the screen
+        public double _tx;   // horizontal points to right
+        public double _ty;   // vertical points up
+        public double _tz;   // towards outside of the screen
 
-        public float _qx;
-        public float _qy;
-        public float _qz;
-        public float _qw;
+        public double _qx;
+        public double _qy;
+        public double _qz;
+        public double _qw;
 
         // Distortion Param
-        public float _k1;
-        public float _k2;
-        public float _k3;
-        public float _p1;
-        public float _p2;
+        public double _k1;
+        public double _k2;
+        public double _k3;
+        public double _p1;
+        public double _p2;
 
-        private float DEFAULT_ASPECT_RATIO = 4.f/3.f;
+        private double DEFAULT_ASPECT_RATIO = 4.0/3.0;
 
         public CameraParam() {}
 
-        public CameraParam(int width, int height, float scaleFactor,
-                           float fx, float fy, float cx, float cy, float s,
-                           float tx, float ty, float tz,
-                           float qx, float qy, float qz, float qw,
-                           float k1, float k2, float k3, float p1, float p2) {
+        public CameraParam(int width, int height, double scaleFactor,
+                           double fx, double fy, double cx, double cy, double s,
+                           double tx, double ty, double tz,
+                           double qx, double qy, double qz, double qw,
+                           double k1, double k2, double k3, double p1, double p2) {
 
             setFrameSize(width, height, scaleFactor);
             setInrinsics(fx, fy, cx, cy, s);
@@ -395,8 +397,8 @@ public class CameraUtil {
             setDistortionParam(k1, k2, k3, p1, p2);
         }
 
-        public void setFrameSize(int width, int height, float scaleFactor){
-            if((float)width/height == DEFAULT_ASPECT_RATIO){
+        public void setFrameSize(int width, int height, double scaleFactor){
+            if((double)width/height == DEFAULT_ASPECT_RATIO){
                 frameWidth = width;
                 frameHeight = height;
                 _scaleFactor = scaleFactor;
@@ -405,9 +407,9 @@ public class CameraUtil {
             }
         }
 
-        public float[] getFrameSize(){ return new float[] {frameWidth, frameHeight}; }
+        public double[] getFrameSize(){ return new double[] {frameWidth, frameHeight}; }
 
-        public void setInrinsics(float fx, float fy, float cx, float cy, float s){
+        public void setInrinsics(double fx, double fy, double cx, double cy, double s){
             _fx = fx * _scaleFactor;
             _fy = fy * _scaleFactor;
             _cx = cx * _scaleFactor;
@@ -415,10 +417,10 @@ public class CameraUtil {
             _s = s;
         }
 
-        public void setInrinsics(float[] intrinsics){
+        public void setInrinsics(double[] intrinsics){
 
             if (intrinsics.length != 5){
-                Log.e(TAG, "Intrinsics expect Array of 5 float, but get size: " + intrinsics.length);
+                Log.e(TAG, "Intrinsics expect Array of 5 double, but get size: " + intrinsics.length);
                 return;
             }
 
@@ -437,7 +439,7 @@ public class CameraUtil {
             return new double[] {_fx, 0, _cx, 0, _fy, _cy, 0, 0, 1};
         }
 
-        public void setExtrinsic(float tx, float ty, float tz, float qx, float qy, float qz, float qw){
+        public void setExtrinsic(double tx, double ty, double tz, double qx, double qy, double qz, double qw){
             _tx = tx;
             _ty = ty;
             _tz = tz;
@@ -447,15 +449,15 @@ public class CameraUtil {
             _qw = qw;
         }
 
-        public void setExtrinsic(float[] translation, float[] rotation){
+        public void setExtrinsic(double[] translation, double[] rotation){
 
             if (translation.length != 3){
-                Log.e(TAG, "Extrinsic expect Array of 3 float for translation parameter, but get size: " + translation.length);
+                Log.e(TAG, "Extrinsic expect Array of 3 double for translation parameter, but get size: " + translation.length);
                 return;
             }
 
             if (rotation.length != 4){
-                Log.e(TAG, "Extrinsic expect Array of 4 float for rotation parameter, but get size: " + translation.length);
+                Log.e(TAG, "Extrinsic expect Array of 4 double for rotation parameter, but get size: " + translation.length);
                 return;
             }
 
@@ -469,15 +471,23 @@ public class CameraUtil {
             _qw = rotation[3];
         }
 
-        public float[] getTranslation(){
-            return new float[] {_tx, _ty, _tz};
+        public double[] getTranslation(){
+            return new double[] {_tx, _ty, _tz};
         }
 
-        public float[] getRotation() { return new float[] {_qx, _qy, _qz, _qw}; }
+        public double[] getRotation() { return new double[] {_qx, _qy, _qz, _qw}; }
 
-        public double[] getR() { return convertQuatToMat(getRotation()); }
+//        public double[] getR() { return convertQuatToMat(getRotation()); }
 
-        public void setDistortionParam(float k1, float k2, float k3, float p1, float p2){
+        public double[] getR() {
+            return new double[] {
+                1, 0, 0,
+                0, 1, 0,
+                0, 0, 1
+            };
+        }
+
+        public void setDistortionParam(double k1, double k2, double k3, double p1, double p2){
             _k1 = k1;
             _k2 = k2;
             _k3 = k3;
@@ -485,10 +495,10 @@ public class CameraUtil {
             _p2 = p2;
         }
 
-        public void setDistortionParam(float[] distortion){
+        public void setDistortionParam(double[] distortion){
 
             if (distortion.length != 5){
-                Log.e(TAG, "Distortion expect Array of 5 float, but get size: " + distortion.length);
+                Log.e(TAG, "Distortion expect Array of 5 double, but get size: " + distortion.length);
                 return;
             }
 
@@ -501,6 +511,42 @@ public class CameraUtil {
 
         public double[] getDistortionParam(){
             return new double[] {_k1, _k2, _p1, _p2, _k3};
+        }
+
+        /**
+         * Projection matrix of the rectified image (Intrinsics after rectify)
+         * P = K * [R|t]
+         * @return
+         */
+        public double[] getP(){
+            double[] P = new double[12];
+            double[] R = getR();
+
+            double r11 = R[0];
+            double r12 = R[1];
+            double r13 = R[2];
+
+            double r21 = R[3];
+            double r22 = R[4];
+            double r23 = R[5];
+
+            double r31 = R[6];
+            double r32 = R[7];
+            double r33 = R[8];
+
+            // TODO calculate projection matrix
+
+//            return new double[] {
+//                _fx*r11+_cx*r31,    _fx*r12+_cx*r32,    _fx*r13+_cx*r33,    _fx*_tx+_cx,
+//                _fx*r21+_cx*r31,    _fx*r22+_cx*r32,    _fx*r23+_cx*r33,    _fy*_ty+_cy,
+//                r31,                r32,                r33,                1
+//            };
+
+            return new double[] {
+                    _fx,    0,      _cx,    0,
+                    0,      _fy,    _cy,    0,
+                    0,      0,      1,      0
+            };
         }
 
     }

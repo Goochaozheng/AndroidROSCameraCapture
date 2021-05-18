@@ -4,20 +4,11 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
-import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.TextureView;
 
 import org.ros.android.RosActivity;
-import org.ros.concurrent.CancellableLoop;
-import org.ros.namespace.GraphName;
-import org.ros.node.ConnectedNode;
-import org.ros.node.Node;
-import org.ros.node.NodeConfiguration;
-import org.ros.node.NodeMain;
 import org.ros.node.NodeMainExecutor;
-import org.ros.node.topic.Publisher;
-import org.w3c.dom.Text;
 
 import java.net.URI;
 
@@ -58,11 +49,12 @@ public class MainActivity extends RosActivity {
         colorView = (TextureView) findViewById(R.id.colorPreview);
         depthView = (TextureView) findViewById(R.id.depthPreivew);
 
+
         mColorCameraCapture = new ColorCameraCapture(this, colorView);
         mDepthCameraCapture = new DepthCameraCapture(this, depthView);
 
-        mColorCameraCapture.startCameraPreview();
-        mDepthCameraCapture.startCameraPreview();
+        mColorCameraCapture.startCamera();
+        mDepthCameraCapture.startCamera();
     }
 
     @Override
@@ -73,4 +65,7 @@ public class MainActivity extends RosActivity {
         mColorCameraCapture.startRosNode(nodeMainExecutor);
         mDepthCameraCapture.startRosNode(nodeMainExecutor);
     }
+
+
+
 }
