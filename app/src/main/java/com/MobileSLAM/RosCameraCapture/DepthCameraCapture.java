@@ -53,7 +53,7 @@ public class DepthCameraCapture {
     private CameraManager mCameraManager;
     private CaptureRequest.Builder mCaptureRequestBuilder;
 
-    private Object frameLock = new Object();
+    private final Object frameLock = new Object();
     private boolean hasNext = false;
 
     private String imageEncoding = "mono16";
@@ -176,7 +176,7 @@ public class DepthCameraCapture {
      * Depth value in short (millimeter)
      * Pixels are undistorted and registered to the rgb image
      * @return depth map in short
-     * @throws InterruptedException
+     * @throws InterruptedException synchronization excption
      */
     public short[] getLatestFrameValue() throws InterruptedException {
         short[] copyData;
@@ -200,9 +200,8 @@ public class DepthCameraCapture {
      */
     public byte[] getLatestFrameGray() throws InterruptedException {
         short[] depthValue = getLatestFrameValue();
-        byte[] depthGray = CameraUtil.convertShortToGray(depthValue, depthValue.length, maxDepthThreshold);
 
-        return depthGray;
+        return CameraUtil.convertShortToGray(depthValue, depthValue.length, maxDepthThreshold);
     }
 
 
@@ -211,9 +210,8 @@ public class DepthCameraCapture {
      */
     public byte[] getLatestFrameShort() throws InterruptedException {
         short[] depthValue = getLatestFrameValue();
-        byte[] depthByte = CameraUtil.convertShortToByte(depthValue, depthValue.length);
 
-        return depthByte;
+        return CameraUtil.convertShortToByte(depthValue, depthValue.length);
     }
 
     /**
@@ -243,7 +241,7 @@ public class DepthCameraCapture {
      * Callback for camera device state change
      * Create capture session and build capture target
      */
-    private CameraDevice.StateCallback depthCameraStateCallback = new CameraDevice.StateCallback() {
+    private final CameraDevice.StateCallback depthCameraStateCallback = new CameraDevice.StateCallback() {
         @Override
         public void onOpened(@NonNull CameraDevice cameraDevice) {
             // start capture session as camera opened
@@ -282,7 +280,7 @@ public class DepthCameraCapture {
      * Callback for image reader, handle incoming depth frame
      * Parse DEPTH16 into real depth value and confidence
      * */
-    private ImageReader.OnImageAvailableListener depthImageAvailableListener = new ImageReader.OnImageAvailableListener() {
+    private final ImageReader.OnImageAvailableListener depthImageAvailableListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader imageReader) {
             Image img = imageReader.acquireLatestImage();
@@ -310,7 +308,7 @@ public class DepthCameraCapture {
      * Callback for capture session state change
      * Create repeat capture request
      */
-    private CameraCaptureSession.StateCallback depthCameraCaptureSessionStateCallback = new CameraCaptureSession.StateCallback() {
+    private final CameraCaptureSession.StateCallback depthCameraCaptureSessionStateCallback = new CameraCaptureSession.StateCallback() {
         @Override
         public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
             try{
@@ -333,7 +331,7 @@ public class DepthCameraCapture {
      * Read current frame as gray / uint16
      * Send frame in sensor_msgs/Image (mono8 / mono16)
      */
-    private NodeMain publishNodeDepth = new NodeMain() {
+    private final NodeMain publishNodeDepth = new NodeMain() {
         @Override
         public GraphName getDefaultNodeName() {
             return GraphName.of("depth");
@@ -366,28 +364,26 @@ public class DepthCameraCapture {
 
             connectedNode.executeCancellableLoop(new CancellableLoop() {
                 @Override
-                protected void loop() throws InterruptedException {
+                protected void loop(){
 
                     Time timestamp = connectedNode.getCurrentTime();
 
                     try{
 
-                        if(imageEncoding == "mono8"){
+                        if(imageEncoding.equals("mono8")){
                             // Send depth in 8bit gray
                             img.setEncoding("8UC1");
                             img.setStep(mCameraParam.frameWidth);
                             dataStream.write(getLatestFrameGray());
 
-                        }else if(imageEncoding == "mono16"){
+                        }else if(imageEncoding.equals("mono16")){
                             // Send depth in uint16
                             img.setEncoding("16UC1");
                             img.setStep(mCameraParam.frameWidth * 2);
                             dataStream.write(getLatestFrameShort());
                         }
 
-                    }catch (IOException e){
-                        e.printStackTrace();
-                    }catch (InterruptedException e){
+                    }catch (IOException | InterruptedException e){
                         e.printStackTrace();
                     }
 

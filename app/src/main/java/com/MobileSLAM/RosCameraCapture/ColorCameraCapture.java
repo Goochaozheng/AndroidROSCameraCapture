@@ -62,8 +62,8 @@ public class ColorCameraCapture{
 
 //    private int imageEncoding = ImageFormat.JPEG;
 
-    private Object frameLockJPEG = new Object();
-    private Object frameLockYUV = new Object();
+    private final Object frameLockJPEG = new Object();
+    private final Object frameLockYUV = new Object();
     public boolean hasNextJPEG = false;
     public boolean hasNextYUV = false;
 
@@ -219,11 +219,9 @@ public class ColorCameraCapture{
             hasNextYUV = false;
         }
 
-        byte[] bgr8Data = CameraUtil.convertYUVToBGRA(copyData_y, copyData_u, copyData_v,
+        return CameraUtil.convertYUVToBGRA(copyData_y, copyData_u, copyData_v,
                 yRowStride, uvRowStride, uvPixelStride,
                 320, 240);
-
-        return bgr8Data;
     }
 
     /**
@@ -246,9 +244,8 @@ public class ColorCameraCapture{
         // Compress Bitmap to JPEG for publishing
         ByteArrayOutputStream jpegStream = new ByteArrayOutputStream();
         colorBitmapJPEG.compress(Bitmap.CompressFormat.JPEG, 80, jpegStream);
-        byte[] jpegData = jpegStream.toByteArray();
 
-        return jpegData;
+        return jpegStream.toByteArray();
     }
 
 
@@ -257,18 +254,19 @@ public class ColorCameraCapture{
      * Callback for camera device state change
      * Create capture session and build capture target
      */
-    private CameraDevice.StateCallback colorCameraStateCallback = new CameraDevice.StateCallback(){
+    private final CameraDevice.StateCallback colorCameraStateCallback = new CameraDevice.StateCallback(){
 
         @Override
         public void onOpened(@NonNull CameraDevice cameraDevice) {
 
-            Log.d(TAG, "Camera Thread: " + String.valueOf(Thread.currentThread().getId()));
+            Log.d(TAG, "Camera Thread: " + Thread.currentThread().getId());
 
             Log.i(TAG, "Camera " + cameraDevice.getId() + " Opened");
 
             try {
                 CameraCharacteristics chara = mCameraManager.getCameraCharacteristics(mCameraId);
                 StreamConfigurationMap configs = chara.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                assert configs != null;
                 configs.getOutputSizes(ImageFormat.JPEG);
             } catch (CameraAccessException e) {
                 e.printStackTrace();
@@ -394,7 +392,7 @@ public class ColorCameraCapture{
      * Callback for capture session state change
      * Create repeat capture request
      */
-    private CameraCaptureSession.StateCallback colorCameraCaptureSessionStateCallback = new CameraCaptureSession.StateCallback() {
+    private final CameraCaptureSession.StateCallback colorCameraCaptureSessionStateCallback = new CameraCaptureSession.StateCallback() {
         @Override
         public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
             try{
@@ -418,7 +416,7 @@ public class ColorCameraCapture{
      * Resize to 2560x1920
      * Send frame in sensor_msgs/CompressedImage (jpeg)
      */
-    private NodeMain publishNodeCompressed = new NodeMain() {
+    private final NodeMain publishNodeCompressed = new NodeMain() {
         @Override
         public GraphName getDefaultNodeName() {
             return GraphName.of("color");
@@ -427,7 +425,7 @@ public class ColorCameraCapture{
         @Override
         public void onStart(ConnectedNode connectedNode) {
 
-            Log.d(TAG, "Image Publishing Thread: " + String.valueOf(Thread.currentThread().getId()));
+            Log.d(TAG, "Image Publishing Thread: " + Thread.currentThread().getId());
 
             // Image publisher for compressed JPEG image
             Publisher<sensor_msgs.CompressedImage> compressedImagePublisher = connectedNode.newPublisher("~compressed", sensor_msgs.CompressedImage._TYPE);
@@ -446,9 +444,7 @@ public class ColorCameraCapture{
                     try{
                         byte[] jpegByte = getLatestFrameJPEG();
                         dataStream.write(jpegByte);
-                    } catch (IOException e){
-                        e.printStackTrace();
-                    } catch (InterruptedException e){
+                    } catch (IOException | InterruptedException e){
                         e.printStackTrace();
                     }
 
@@ -481,7 +477,7 @@ public class ColorCameraCapture{
     /**
      * ROS node publishing Low Resolution image (320x240)
      */
-    private NodeMain publishNodeImage = new NodeMain() {
+    private final NodeMain publishNodeImage = new NodeMain() {
         @Override
         public GraphName getDefaultNodeName() {
             return null;
@@ -490,7 +486,7 @@ public class ColorCameraCapture{
         @Override
         public void onStart(ConnectedNode connectedNode) {
 
-            Log.d(TAG, "LR Image Publishing Thread: " + String.valueOf(Thread.currentThread().getId()));
+            Log.d(TAG, "LR Image Publishing Thread: " + Thread.currentThread().getId());
 
             // Image publisher for compressed BGRA8 image
             Publisher<sensor_msgs.Image> lrImagePublisher = connectedNode.newPublisher("~image", sensor_msgs.Image._TYPE);
@@ -526,9 +522,7 @@ public class ColorCameraCapture{
                     try{
                         byte[] rgb8Byte = getLatestFrameYUV();
                         dataStream.write(rgb8Byte);
-                    } catch (IOException e){
-                        e.printStackTrace();
-                    } catch (InterruptedException e){
+                    } catch (IOException | InterruptedException e){
                         e.printStackTrace();
                     }
 
